@@ -1,0 +1,1777 @@
+/* =========================================================================
+   CLASSPORT — LANDING
+   Font matches the wordmark exactly: Fraunces with the same family chain
+   the wordmark SVG declares, weight 600 for display, 500 for body, NO
+   font-variation-settings overrides (browser auto-picks opsz the same way
+   the wordmark renders), letter-spacing 0 everywhere.
+   ========================================================================= */
+.landing {
+  --ink:          #1a1512;
+  --ink-2:        #2c2520;
+  --ink-3:        #554a40;
+  --ink-4:        #8a7d70;
+  --ink-5:        #c6baa8;
+  --rule:         rgba(26,21,18,0.12);
+  --rule-2:       rgba(26,21,18,0.06);
+
+  --paper:        #f3ebd8;
+  --paper-2:      #eee1c4;
+  --paper-3:      #e6d5b0;
+  --paper-raise:  #fbf6e8;
+
+  --sepia:        #a8804a;
+  --sepia-bright: #c6a572;
+  --sepia-deep:   #7a5a2f;
+
+  --serif: "Fraunces", "Playfair Display", Georgia, serif;
+  --mono:  "JetBrains Mono", ui-monospace, monospace;
+
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 18px;
+  line-height: 1.6;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+  position: relative;
+  min-height: 100dvh;
+}
+@media (prefers-color-scheme: dark) {
+  .landing {
+    --ink:         #f3ebd8;
+    --ink-2:       #ecddbe;  /* was #e6d5b0 — slightly brighter so muted body text is legible */
+    --ink-3:       #d2c0a0;  /* was #b8a78a — material bump; this is what most labels/nav use */
+    --ink-4:       #a8997f;  /* was #8a7d70 — secondary captions / footer */
+    --ink-5:       #3a342d;
+    --rule:        rgba(243,235,216,0.14);
+    --rule-2:      rgba(243,235,216,0.06);
+    --paper:       #14100d;
+    --paper-2:     #1d1813;
+    --paper-3:     #25201a;
+    --paper-raise: #1a1511;
+    --sepia:       #c6a572;
+    --sepia-bright:#d9bb87;
+    --sepia-deep:  #a8804a;
+  }
+}
+.landing ::selection { background: var(--sepia); color: var(--paper); }
+
+/* faint paper grain */
+.landing::before {
+  content: "";
+  position: fixed; inset: 0;
+  pointer-events: none; z-index: 0;
+  background-image:
+    radial-gradient(rgba(0,0,0,0.022) 1px, transparent 1px),
+    radial-gradient(rgba(0,0,0,0.012) 1px, transparent 1px);
+  background-size: 3px 3px, 7px 7px;
+  background-position: 0 0, 1px 2px;
+  mix-blend-mode: multiply;
+}
+@media (prefers-color-scheme: dark) {
+  .landing::before { mix-blend-mode: screen; opacity: 0.5; }
+}
+.landing .wrap { position: relative; z-index: 1; }
+.landing .container {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+@media (max-width: 760px) { .landing .container { padding: 0 24px; } }
+@media (max-width: 380px) { .landing .container { padding: 0 20px; } }
+
+/* mono — kept for code blocks, terminal, section labels, star count */
+.landing .code,
+.landing .terminal,
+.landing .num,
+.landing .when,
+.landing .who,
+.landing .sec-label,
+.landing .gh-count,
+.landing .url,
+.landing .theme .label,
+.landing .footer .lang {
+  font-family: var(--mono);
+}
+
+/* ============ FLOATING NAV ============
+   Fixed pill at top-center, glass-morphism, hides on scroll-down + reappears
+   on scroll-up. The toggle is React-driven via the .is-hidden class. */
+.landing .landing-nav {
+  position: fixed;
+  top: 16px;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  justify-content: center;
+  padding: 0 16px;
+  pointer-events: none;
+  transition:
+    transform 280ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 280ms ease-out;
+}
+.landing .landing-nav.is-hidden {
+  transform: translateY(-130%);
+  opacity: 0;
+}
+
+.landing .nav {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 1080px;
+  padding: 10px 16px 10px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  background: rgba(251, 246, 232, 0.72);
+  backdrop-filter: saturate(180%) blur(18px);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.4) inset,
+    0 8px 24px rgba(26, 21, 18, 0.08),
+    0 2px 6px rgba(26, 21, 18, 0.04);
+}
+@media (prefers-color-scheme: dark) {
+  .landing .nav {
+    background: rgba(26, 21, 17, 0.7);
+    border-color: rgba(243, 235, 216, 0.1);
+    box-shadow:
+      0 1px 0 rgba(243, 235, 216, 0.04) inset,
+      0 8px 24px rgba(0, 0, 0, 0.5),
+      0 2px 6px rgba(0, 0, 0, 0.25);
+  }
+}
+.landing .nav .brand {
+  display: inline-flex; align-items: center;
+  text-decoration: none;
+  color: var(--ink);
+  height: 32px;
+}
+.landing .nav .brand img,
+.landing .nav .brand picture img {
+  height: 28px;
+  width: auto;
+  display: block;
+}
+.landing .nav ul {
+  list-style: none;
+  display: flex; gap: 24px;
+  margin: 0; padding: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.landing .nav ul a {
+  color: inherit; text-decoration: none;
+  transition: color 120ms;
+}
+.landing .nav ul a:hover { color: var(--ink); }
+/* shared GH pill — used in topbar and footer */
+.landing .gh {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  text-decoration: none;
+  padding: 6px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper-raise);
+  transition: border-color 120ms;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--serif);
+}
+.landing .gh:hover { border-color: var(--ink-4); }
+.landing .gh .gh-icon { width: 15px; height: 15px; }
+.landing .gh .gh-star { width: 14px; height: 14px; color: #e3b341; margin-left: 2px; }
+.landing .gh .gh-count { min-width: 18px; text-align: left; }
+@media (max-width: 760px) {
+  .landing .nav ul { display: none; }
+  .landing .nav { padding: 8px 10px 8px 14px; gap: 10px; }
+  .landing .nav .brand img,
+  .landing .nav .brand picture img { height: 24px; }
+  .landing .gh { padding: 5px 10px; font-size: 12px; }
+  .landing .landing-nav { padding: 0 12px; top: 12px; }
+}
+
+/* ============ HERO ============ */
+.landing .hero {
+  position: relative;
+  /* Top padding clears the floating navbar (top:16px + ~56px tall = ~72px) plus breathing room.
+     Vertical-only — hero is also `.container`, which provides horizontal padding. */
+  padding-top: 132px;
+  padding-bottom: 96px;
+  text-align: center;
+  overflow: hidden;
+}
+@media (max-width: 640px) {
+  .landing .hero { padding-top: 96px; padding-bottom: 64px; }
+}
+
+.landing .hero::before {
+  content: "";
+  position: absolute;
+  left: 50%; top: 180px;
+  width: 1200px; height: 500px;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse 50% 70% at 50% 50%,
+    rgba(168,128,74,0.18) 0%,
+    rgba(168,128,74,0.06) 40%,
+    transparent 70%);
+  pointer-events: none;
+  z-index: -1;
+  filter: blur(40px);
+}
+
+.landing .hero-wordmark {
+  margin-bottom: 40px;
+  display: flex;
+  justify-content: center;
+}
+.landing .hero-wordmark picture,
+.landing .hero-wordmark img {
+  height: clamp(64px, 12vw, 132px);
+  width: auto;
+  display: block;
+}
+
+.landing .hero .lead {
+  font-weight: 500;
+  font-size: clamp(20px, 2.4vw, 26px);
+  line-height: 1.4;
+  color: var(--ink);
+  max-width: 38ch;
+  margin: 0 auto 36px;
+  text-wrap: pretty;
+}
+
+.landing .hero-ctas {
+  /* Equal-width columns so the GitHub CTA and Install guide button match in size,
+     even though their content differs in length. */
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  justify-content: center;
+  gap: 12px;
+  max-width: 420px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.landing .cta-primary,
+.landing .cta-secondary {
+  justify-content: center;
+}
+@media (max-width: 480px) {
+  .landing .hero-ctas {
+    grid-auto-flow: row;
+    max-width: 320px;
+  }
+}
+.landing .cta-primary,
+.landing .cta-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 22px;
+  /* Both CTAs share a 1px border + fixed height so they're pixel-identical regardless
+     of children content (icon + star pill push the natural line-box otherwise). */
+  border: 1px solid transparent;
+  border-radius: 10px;
+  height: 48px;
+  min-height: 48px;
+  max-height: 48px;
+  box-sizing: border-box;
+  text-decoration: none;
+  font-family: var(--serif);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  transition: background 120ms, border-color 120ms, transform 120ms;
+}
+.landing .cta-primary {
+  background: var(--ink);
+  color: var(--paper);
+}
+.landing .cta-primary:hover {
+  background: var(--ink-2);
+  transform: translateY(-1px);
+}
+.landing .cta-secondary {
+  border: 1px solid var(--rule);
+  background: var(--paper-raise);
+  color: var(--ink);
+}
+.landing .cta-secondary:hover {
+  border-color: var(--ink-4);
+  background: var(--paper-2);
+}
+.landing .cta-stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px;
+  /* Pull the pill closer to surrounding label + arrow so the gap reads as one unit. */
+  margin: 0 -6px 0 -10px;
+  border-radius: 999px;
+  background: rgba(243, 235, 216, 0.14);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.landing .cta-star { width: 12px; height: 12px; color: #e3b341; }
+.landing .cta-arrow { margin-left: 2px; transform: translateY(-1px); display: inline-block; }
+.landing .cta-gh-icon { width: 14px; height: 14px; flex: none; transform: translateY(-1px); }
+
+/* hero screenshot */
+.landing .hero-screen {
+  margin-top: 72px;
+  position: relative;
+  max-width: 1040px;
+  margin-left: auto; margin-right: auto;
+}
+.landing .hero-screen::before {
+  content: "";
+  position: absolute;
+  inset: 30px -40px -60px -40px;
+  background: radial-gradient(ellipse 60% 50% at 50% 50%,
+    rgba(26,21,18,0.16) 0%, transparent 70%);
+  filter: blur(24px);
+  z-index: -1;
+  pointer-events: none;
+}
+.landing .hero-screen .mock {
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--paper-raise);
+  box-shadow: 0 20px 60px -20px rgba(26,21,18,0.22), 0 2px 0 rgba(255,255,255,0.4) inset;
+}
+.landing .hero-screen .chrome {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper-2);
+}
+.landing .hero-screen .chrome .dots { display: flex; gap: 6px; }
+.landing .hero-screen .chrome .dots span {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--ink-5);
+  opacity: 0.6;
+}
+.landing .hero-screen .chrome .url {
+  flex: 1;
+  font-size: 11px;
+  color: var(--ink-3);
+  text-align: center;
+}
+.landing .hero-screen .screen-img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* ============ SECTION SHELL ============ */
+.landing section { position: relative; }
+.landing .sec {
+  /* Only set vertical padding — sections combine `sec container` so the
+     container's horizontal padding must come through. Using the shorthand
+     here (`padding: 96px 0`) zeroes out left/right and breaks mobile. */
+  padding-top: 96px;
+  padding-bottom: 96px;
+  border-top: 1px solid var(--rule);
+}
+@media (max-width: 640px) {
+  .landing .sec { padding-top: 72px; padding-bottom: 72px; }
+}
+
+.landing .sec-label {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--sepia-deep);
+  margin-bottom: 18px;
+  font-weight: 600;
+}
+@media (prefers-color-scheme: dark) {
+  .landing .sec-label { color: var(--sepia-bright); }
+}
+.landing .sec-h {
+  font-weight: 600;
+  font-size: clamp(28px, 3.6vw, 40px);
+  line-height: 1.15;
+  color: var(--ink);
+  max-width: 22ch;
+  margin-bottom: 24px;
+}
+.landing .sec-h em { font-style: italic; color: var(--sepia-deep); }
+@media (prefers-color-scheme: dark) { .landing .sec-h em { color: var(--sepia-bright); } }
+
+/* ============ MCP PRIMER (§ 00) ============ */
+.landing .mcp-body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  /* let the body text run to the full section width — same width as the
+     diagram below it, so the column reads as one block */
+  max-width: none;
+}
+.landing .mcp-body p {
+  font-weight: 500;
+  font-size: clamp(17px, 1.5vw, 20px);
+  line-height: 1.65;
+  color: var(--ink-2);
+  max-width: 80ch;
+}
+.landing .mcp-body p em {
+  font-style: italic;
+  color: var(--sepia-deep);
+}
+@media (prefers-color-scheme: dark) {
+  .landing .mcp-body p em { color: var(--sepia-bright); }
+}
+.landing .mcp-diagram {
+  margin-top: 16px;
+  display: grid;
+  /* middle column slightly wider than each side so the line has real
+     presence between the two cards instead of being a tiny segment */
+  grid-template-columns: 1fr 1.2fr 1fr;
+  align-items: stretch;
+  gap: 16px;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  background: var(--paper-raise);
+  padding: 22px 24px;
+}
+@media (max-width: 760px) {
+  .landing .mcp-diagram {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 18px;
+  }
+}
+.landing .mcp-side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.landing .mcp-side-h {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--ink);
+}
+.landing .mcp-side-b {
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+/* MCP arrow — single horizontal line at the EXACT vertical middle of the
+   diagram, with the "MCP" label floating above it. One dot bounces back
+   and forth along the line. */
+.landing .mcp-arrow {
+  position: relative;
+  display: flex;
+  align-items: center;       /* track sits at the exact vertical middle */
+  justify-content: center;
+  padding: 0 8px;
+  color: var(--sepia-deep);
+}
+@media (prefers-color-scheme: dark) {
+  .landing .mcp-arrow { color: var(--sepia-bright); }
+}
+.landing .mcp-arrow-label {
+  position: absolute;
+  left: 50%;
+  bottom: 50%;
+  transform: translate(-50%, -10px);  /* sit just above the center line */
+  /* Solid card-colored background interrupts the connecting line cleanly,
+     so the label reads as a labelled break instead of overlapping the line.
+     Important on mobile where the line is vertical and passes through the label. */
+  padding: 2px 8px;
+  background: var(--paper-raise);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.landing .mcp-arrow-track {
+  position: relative;
+  width: 100%;
+  height: 1px;
+  background: currentColor;
+}
+.landing .mcp-arrow-dot {
+  position: absolute;
+  top: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 12px currentColor;
+  animation: mcp-bounce 3.4s ease-in-out infinite;
+}
+@keyframes mcp-bounce {
+  0%, 100% { left: 0; }
+  50%      { left: calc(100% - 7px); }
+}
+@keyframes mcp-bounce-v {
+  0%, 100% { top: 0; }
+  50%      { top: calc(100% - 7px); }
+}
+@media (max-width: 760px) {
+  .landing .mcp-arrow { padding: 8px 0; }
+  .landing .mcp-arrow-track { height: 56px; width: 1px; background: currentColor; }
+  .landing .mcp-arrow-dot {
+    top: 0;
+    left: -3px;
+    animation: mcp-bounce-v 3.4s ease-in-out infinite;
+  }
+  /* Vertical line on mobile — label sits to the LEFT of the line so the
+     two never overlap. Background still set so the dot can pass behind it
+     cleanly when bouncing past the label's vertical position. */
+  .landing .mcp-arrow-label {
+    left: auto;
+    right: calc(50% + 8px);
+    bottom: auto;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+}
+
+/* short paragraph between section heading and content */
+.landing .lede {
+  font-weight: 500;
+  font-size: clamp(17px, 1.5vw, 19px);
+  line-height: 1.65;
+  color: var(--ink-2);
+  max-width: 56ch;
+  margin: 4px 0 0;
+}
+.landing .lede em { font-style: italic; color: var(--ink-2); }
+
+/* Study workflow cards. */
+.landing .extend-grid {
+  margin-top: 32px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+@media (max-width: 820px) {
+  .landing .extend-grid { grid-template-columns: 1fr; }
+}
+.landing .extend-card {
+  padding: 24px;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  background: var(--paper-raise);
+}
+.landing .extend-card-title {
+  margin: 0 0 14px;
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 22px;
+  line-height: 1.2;
+  color: var(--ink);
+}
+.landing .extend-description {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--ink-2);
+}
+.landing .extend-description code {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+/* bulleted list in the Extend section */
+.landing .extend-list {
+  margin-top: 28px;
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px 32px;
+}
+@media (max-width: 820px) { .landing .extend-list { grid-template-columns: 1fr; } }
+.landing .extend-list li {
+  font-weight: 500;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--ink-3);
+  position: relative;
+  padding-left: 14px;
+}
+.landing .extend-list li::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0.62em;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--sepia);
+}
+.landing .extend-list li b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* inline code chip used inside CTA-secondary */
+.landing .inline-code {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: inherit;
+  background: rgba(168,128,74,0.12);
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 4px;
+}
+
+/* ============ EXAMPLES ============ */
+.landing .flows {
+  margin-top: 32px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+@media (max-width: 820px) { .landing .flows { grid-template-columns: 1fr; gap: 20px; } }
+@media (max-width: 480px) {
+  .landing .flow { padding: 22px 18px 20px; }
+}
+.landing .flow {
+  padding: 28px 28px 24px;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  background: var(--paper-raise);
+  display: flex; flex-direction: column; gap: 16px;
+}
+.landing .flow .when {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--sepia-deep);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+@media (prefers-color-scheme: dark) { .landing .flow .when { color: var(--sepia-bright); } }
+/* What the user says inside ChatGPT.
+   Italicised, prominent, with a sepia rule on the left so it visually reads as
+   a quoted prompt rather than a chat bubble. The .result paragraph below
+   describes what the AI then does through MCP — that's the ClassPort half. */
+.landing .said {
+  margin: 0;
+  padding: 4px 0 4px 18px;
+  border-left: 3px solid var(--sepia);
+  font-style: italic;
+  font-weight: 500;
+  font-size: clamp(16px, 1.5vw, 18px);
+  line-height: 1.5;
+  color: var(--ink);
+}
+.landing .result {
+  font-weight: 500;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+.landing .result code {
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 500;
+  background: rgba(168,128,74,0.14);
+  color: var(--sepia-deep);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+@media (prefers-color-scheme: dark) { .landing .result code { color: var(--sepia-bright); } }
+
+/* legacy chip/row styles kept around in case you still want them
+   somewhere — not used by §02 anymore */
+.landing .said-result {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px dashed var(--rule);
+  padding-top: 14px;
+}
+.landing .said-result-label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--sepia-deep);
+}
+@media (prefers-color-scheme: dark) {
+  .landing .said-result-label { color: var(--sepia-bright); }
+}
+
+.landing .said-result-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.landing .said-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--ink);
+  background: rgba(168, 128, 74, 0.1);
+  border: 1px solid rgba(168, 128, 74, 0.22);
+  padding: 4px 9px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.landing .said-chip-tick {
+  color: #6ec27a;
+  font-weight: 700;
+}
+.landing .said-chip-action {
+  background: rgba(122, 194, 127, 0.08);
+  border-color: rgba(122, 194, 127, 0.28);
+  color: #6ec27a;
+}
+
+.landing .said-result-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.landing .said-result-list li {
+  display: grid;
+  grid-template-columns: 105px 1fr auto;
+  gap: 14px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--serif);
+  font-size: 14.5px;
+  font-weight: 500;
+}
+.landing .said-result-list li:last-child {
+  border-bottom: 0;
+}
+.landing .said-row-date {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--sepia-deep);
+  text-transform: uppercase;
+}
+@media (prefers-color-scheme: dark) {
+  .landing .said-row-date { color: var(--sepia-bright); }
+}
+.landing .said-row-name {
+  color: var(--ink);
+}
+.landing .said-row-tag {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: #6ec27a;
+  background: rgba(122, 194, 127, 0.1);
+  border: 1px solid rgba(122, 194, 127, 0.28);
+  padding: 2px 7px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+@media (max-width: 520px) {
+  .landing .said-result-list li { grid-template-columns: 1fr auto; }
+  .landing .said-row-date { grid-column: 1 / -1; }
+}
+
+/* ============ THEMES ============ */
+.landing .themes {
+  margin-top: 32px;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  grid-template-rows: auto auto;
+  gap: 20px;
+}
+.landing .theme {
+  background: var(--paper-raise);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  aspect-ratio: 4 / 3;
+  transition: transform 200ms, border-color 200ms;
+}
+.landing .theme:hover { transform: translateY(-2px); border-color: var(--ink-4); }
+.landing .theme .label {
+  position: absolute;
+  bottom: 12px; left: 14px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  background: var(--paper);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  text-transform: uppercase;
+  font-weight: 600;
+  z-index: 2;
+}
+.landing .theme .shot {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  object-position: top left;
+  display: block;
+}
+.landing .theme:nth-child(1) { grid-column: span 3; }
+.landing .theme:nth-child(2) { grid-column: span 3; }
+.landing .theme:nth-child(3) { grid-column: span 2; }
+.landing .theme:nth-child(4) { grid-column: span 2; }
+.landing .theme:nth-child(5) { grid-column: span 2; }
+@media (max-width: 820px) {
+  .landing .themes { grid-template-columns: 1fr 1fr; }
+  .landing .theme { grid-column: span 1 !important; }
+}
+
+/* ============ SELF-HOST ============ */
+.landing .terminal {
+  margin-top: 32px;
+  background: #0f0b08;
+  color: #e6d5b0;
+  border-radius: 14px;
+  padding: 18px 20px 20px;
+  border: 1px solid rgba(243,235,216,0.1);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.65;
+  box-shadow: 0 20px 40px -20px rgba(26,21,18,0.3);
+  position: relative;
+  overflow: hidden;
+}
+.landing .terminal::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 30px;
+  background: #1a1410;
+  border-bottom: 1px solid rgba(243,235,216,0.1);
+}
+.landing .terminal::after {
+  content: "";
+  position: absolute;
+  top: 10px; left: 16px;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: #c6a572;
+  box-shadow: 16px 0 0 #7a5a2f, 32px 0 0 #554a40;
+}
+.landing .terminal .body { margin-top: 20px; }
+.landing .terminal .line { white-space: pre; display: block; }
+
+/* On phones the long setup instructions silently overflow with
+   `overflow: hidden`. Switch to a horizontal scroll container so the full
+   command stays copy-pasteable. */
+@media (max-width: 760px) {
+  .landing .terminal { overflow-x: auto; padding: 18px 14px 18px; font-size: 12px; }
+  .landing .terminal::after { left: 12px; box-shadow: 14px 0 0 #7a5a2f, 28px 0 0 #554a40; }
+}
+.landing .terminal .cmt { color: #8a7d70; }
+.landing .terminal .dol { color: #c6a572; margin-right: 10px; }
+.landing .terminal .out { color: #b8a78a; }
+.landing .terminal .ok  { color: #7ac27f; }
+
+/* ============ FAQ ============ */
+.landing .faq {
+  margin-top: 24px;
+  border-top: 1px solid var(--rule);
+}
+.landing .faq details {
+  border-bottom: 1px solid var(--rule);
+  padding: 22px 0;
+  cursor: pointer;
+}
+.landing .faq details[open] summary .arrow { transform: rotate(45deg); }
+.landing .faq summary {
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 20px;
+  font-weight: 600;
+  font-size: clamp(17px, 1.6vw, 19px);
+  line-height: 1.3;
+  color: var(--ink);
+}
+.landing .faq summary::-webkit-details-marker { display: none; }
+.landing .faq summary .arrow {
+  width: 18px; height: 18px;
+  position: relative;
+  transition: transform 200ms;
+  flex: none;
+}
+.landing .faq summary .arrow::before,
+.landing .faq summary .arrow::after {
+  content: ""; position: absolute;
+  background: var(--ink-3);
+}
+.landing .faq summary .arrow::before {
+  left: 50%; top: 0; bottom: 0; width: 1.5px; transform: translateX(-50%);
+}
+.landing .faq summary .arrow::after {
+  top: 50%; left: 0; right: 0; height: 1.5px; transform: translateY(-50%);
+}
+.landing .faq details p {
+  margin-top: 14px;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--ink-2);
+  line-height: 1.65;
+  max-width: 72ch;
+}
+
+/* ============ FINAL CTA ============ */
+.landing .final {
+  padding: 112px 0 120px;
+  text-align: center;
+  border-top: 1px solid var(--rule);
+  background:
+    radial-gradient(ellipse 70% 80% at 50% 0%, rgba(168,128,74,0.12), transparent 60%);
+}
+@media (max-width: 640px) { .landing .final { padding: 80px 0 96px; } }
+.landing .final h2 {
+  font-weight: 600;
+  font-size: clamp(36px, 6vw, 64px);
+  line-height: 1.04;
+  color: var(--ink);
+  margin-bottom: 20px;
+  max-width: 18ch;
+  margin-left: auto; margin-right: auto;
+}
+.landing .final h2 em { font-style: italic; color: var(--sepia-deep); }
+@media (prefers-color-scheme: dark) { .landing .final h2 em { color: var(--sepia-bright); } }
+.landing .final .sub {
+  color: var(--ink-3);
+  max-width: 50ch;
+  margin: 0 auto 32px;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+/* ============ FOOTER ============ */
+.landing .footer {
+  padding: 48px 0 56px;
+  border-top: 1px solid var(--rule);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 32px;
+  align-items: start;
+  color: var(--ink-3);
+  font-size: 14px;
+  font-weight: 500;
+}
+@media (max-width: 760px) { .landing .footer { grid-template-columns: 1fr; } }
+.landing .footer .fbrand {
+  display: inline-flex; align-items: center;
+  margin-bottom: 12px;
+}
+.landing .footer .fbrand img,
+.landing .footer .fbrand picture img {
+  height: 22px; width: auto; display: block;
+}
+.landing .footer .meta {
+  font-size: 13px;
+  color: var(--ink-4);
+  line-height: 1.7;
+  max-width: 44ch;
+}
+.landing .footer .meta a { color: inherit; }
+.landing .footer .meta b { color: var(--ink-3); font-weight: 600; }
+.landing .footer .flinks {
+  display: flex; flex-direction: column; gap: 10px;
+  text-align: right;
+  align-items: flex-end;
+}
+@media (max-width: 760px) { .landing .footer .flinks { text-align: left; align-items: flex-start; } }
+.landing .footer .flinks a {
+  color: var(--ink-2);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  transition: color 120ms;
+}
+.landing .footer .flinks a:hover { color: var(--ink); }
+
+/* ============ SCROLL REVEAL ============
+   Sections + hero + final fade-up as they enter the viewport. The
+   `.is-visible` class is added by an IntersectionObserver in the React
+   component once each element crosses ~12% threshold. Reduced-motion
+   users see them at full opacity from the start. */
+.landing .hero,
+.landing .sec,
+.landing .final {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 600ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 600ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: opacity, transform;
+}
+.landing .hero.is-visible,
+.landing .sec.is-visible,
+.landing .final.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ============ TERMINAL TYPE-IN ============
+   Each line stays hidden until the terminal block crosses into view, then
+   they cascade in 80ms apart. Cap the stagger at ~24 lines (the install
+   block has 12 — leaving headroom). */
+.landing .terminal .line {
+  opacity: 0;
+  transform: translateX(-4px);
+}
+.landing .terminal.is-visible .line {
+  animation: terminal-line 280ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+.landing .terminal.is-visible .line:nth-child(1)  { animation-delay:  100ms; }
+.landing .terminal.is-visible .line:nth-child(2)  { animation-delay:  180ms; }
+.landing .terminal.is-visible .line:nth-child(3)  { animation-delay:  260ms; }
+.landing .terminal.is-visible .line:nth-child(4)  { animation-delay:  340ms; }
+.landing .terminal.is-visible .line:nth-child(5)  { animation-delay:  420ms; }
+.landing .terminal.is-visible .line:nth-child(6)  { animation-delay:  500ms; }
+.landing .terminal.is-visible .line:nth-child(7)  { animation-delay:  580ms; }
+.landing .terminal.is-visible .line:nth-child(8)  { animation-delay:  660ms; }
+.landing .terminal.is-visible .line:nth-child(9)  { animation-delay:  740ms; }
+.landing .terminal.is-visible .line:nth-child(10) { animation-delay:  820ms; }
+.landing .terminal.is-visible .line:nth-child(11) { animation-delay:  900ms; }
+.landing .terminal.is-visible .line:nth-child(12) { animation-delay:  980ms; }
+.landing .terminal.is-visible .line:nth-child(13) { animation-delay: 1060ms; }
+.landing .terminal.is-visible .line:nth-child(14) { animation-delay: 1140ms; }
+.landing .terminal.is-visible .line:nth-child(15) { animation-delay: 1220ms; }
+@keyframes terminal-line {
+  from { opacity: 0; transform: translateX(-4px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ============ HERO FLOAT ============
+   Tiny 6s drift on the hero screenshot — alive but not distracting. */
+.landing .hero-screen .mock {
+  animation: hero-float 6s ease-in-out infinite;
+}
+@keyframes hero-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+
+/* ============ HERO THEME CAROUSEL ============
+   React-controlled. Auto-advances every 4.5s, pauses on hover or any
+   manual interaction (resumes 9s later). Crossfade between images via
+   opacity transition on `.is-active`. */
+.landing .hero-themes {
+  position: relative;
+  width: 100%;
+  /* Match the 1440 x 1000 browser captures so the whole app stays visible. */
+  aspect-ratio: 1440 / 1000;
+  background: var(--paper-2);
+  overflow: hidden;
+  user-select: none;
+}
+.landing .hero-theme-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* contain instead of cover — guarantees the entire screenshot is visible
+     (right edge never clipped). The container's aspect-ratio matches the
+     screenshot ratio so there's no visible letterboxing in practice. */
+  object-fit: contain;
+  object-position: center;
+  opacity: 0;
+  transition: opacity 600ms cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+.landing .hero-theme-img.is-active {
+  opacity: 1;
+}
+
+/* arrows — high-contrast pill that's visible on every theme bg, regardless
+   of whether the image behind it is light or dark. Solid dark fill, cream
+   icon, subtle cream ring for definition. */
+.landing .hero-theme-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 4;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid rgba(243, 235, 216, 0.35);
+  background: rgba(20, 16, 13, 0.85);
+  color: #f3ebd8;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  transition:
+    background 200ms ease-out,
+    border-color 200ms ease-out,
+    transform 200ms ease-out;
+}
+.landing .hero-theme-nav:hover {
+  background: rgba(20, 16, 13, 0.95);
+  border-color: rgba(243, 235, 216, 0.5);
+  transform: translateY(-50%) scale(1.08);
+}
+.landing .hero-theme-nav:focus-visible {
+  outline: 2px solid var(--sepia);
+  outline-offset: 2px;
+}
+.landing .hero-theme-nav-prev { left: 14px; }
+.landing .hero-theme-nav-next { right: 14px; }
+
+/* dots */
+.landing .hero-theme-dots {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(26, 21, 18, 0.5);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.landing .hero-theme-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(243, 235, 216, 0.4);
+  cursor: pointer;
+  padding: 0;
+  transition: background 200ms ease-out, transform 200ms ease-out;
+}
+.landing .hero-theme-dot:hover { background: rgba(243, 235, 216, 0.7); }
+.landing .hero-theme-dot.is-active {
+  /* fixed cream — not var(--paper), which becomes dark ink in dark mode and
+     would render invisible inside this dark pill */
+  background: #f3ebd8;
+  transform: scale(1.15);
+}
+.landing .hero-theme-dot:focus-visible {
+  outline: 2px solid var(--sepia);
+  outline-offset: 2px;
+}
+
+/* current theme name pill — fixed cream text on fixed dark pill, doesn't
+   invert in dark mode */
+.landing .hero-theme-name {
+  position: absolute;
+  bottom: 14px;
+  right: 14px;
+  z-index: 3;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: #f3ebd8;
+  background: rgba(20, 16, 13, 0.85);
+  padding: 6px 12px;
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+@media (max-width: 640px) {
+  .landing .hero-theme-nav { width: 36px; height: 36px; }
+  .landing .hero-theme-nav-prev { left: 8px; }
+  .landing .hero-theme-nav-next { right: 8px; }
+  .landing .hero-theme-dots { bottom: 8px; padding: 4px 8px; }
+  .landing .hero-theme-name { display: none; }
+}
+
+/* ============ § 01 DAY 0 — ANIMATED DEMO ============
+   Split-panel mock: left = illustrative ChatGPT conversation, right = fake ClassPort
+   Courses view. Whole thing loops on a single 8s timeline. CSS-only.
+
+   Timeline (% of 8s loop):
+     0–4%    quiet, panes empty
+     4–25%   user prompt typewrites in (~2.5s reveal)
+     29–35%  ChatGPT reply appears
+     46–62%  five course rows slide in, 1 per ~0.4s
+     75–85%  hold visible
+     90–100% fade everything out → reset
+*/
+.landing .demo {
+  margin-top: 32px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  border-radius: 16px;
+  overflow: hidden;
+}
+@media (max-width: 760px) {
+  .landing .demo { grid-template-columns: 1fr; }
+  .landing .demo-chat,
+  .landing .demo-courses,
+  .landing .demo-stats { padding: 16px; }
+  .landing .demo-pane { min-height: 320px; }
+}
+
+.landing .demo-pane {
+  position: relative;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  overflow: hidden;
+  min-height: 380px;
+  display: flex;
+  flex-direction: column;
+}
+.landing .demo-pane-chat {
+  background: #0f0b08;
+  color: #e6d5b0;
+  border-color: rgba(243,235,216,0.1);
+}
+.landing .demo-pane-dash {
+  background: var(--paper-raise);
+  color: var(--ink);
+}
+
+/* fake browser/app chrome */
+.landing .demo-chrome {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.landing .demo-pane-chat .demo-chrome {
+  background: #1a1410;
+  border-bottom-color: rgba(243,235,216,0.1);
+  color: #8a7d70;
+}
+.landing .demo-pane-dash .demo-chrome {
+  background: var(--paper-2);
+  border-bottom-color: var(--rule);
+  color: var(--ink-3);
+}
+.landing .demo-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.landing .demo-pane-chat .demo-dot:nth-child(1) { background: #c6a572; }
+.landing .demo-pane-chat .demo-dot:nth-child(2) { background: #7a5a2f; }
+.landing .demo-pane-chat .demo-dot:nth-child(3) { background: #554a40; }
+.landing .demo-pane-dash .demo-dot { background: var(--ink-5); opacity: 0.6; }
+.landing .demo-app { margin-left: 6px; }
+
+/* chat (left pane) */
+.landing .demo-chat {
+  flex: 1;
+  padding: 22px 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.landing .demo-bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 92%;
+}
+.landing .demo-bubble-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8a7d70;
+  font-weight: 600;
+}
+.landing .demo-bubble-you {
+  align-self: flex-end;
+  text-align: right;
+}
+.landing .demo-bubble-ai {
+  align-self: flex-start;
+}
+.landing .demo-typewriter {
+  display: inline-flex;
+  align-items: baseline;
+  position: relative;
+  color: #e6d5b0;
+  background: rgba(198,165,114,0.08);
+  border: 1px solid rgba(198,165,114,0.18);
+  padding: 8px 12px;
+  border-radius: 10px;
+  border-bottom-right-radius: 4px;
+  /* pill itself fades + scales in (empty bubble appears first) */
+  opacity: 0;
+  transform: scale(0.96);
+  transform-origin: 100% 50%;
+  animation: demo-prompt-pill 6s linear infinite;
+}
+.landing .demo-typewriter-text {
+  display: inline-block;
+  /* text reveals left-to-right via clip-path while the pill is already visible */
+  clip-path: inset(0 100% 0 0);
+  animation: demo-prompt-type 6s linear infinite;
+}
+.landing .demo-ai-text {
+  display: inline-block;
+  color: #b8a78a;
+  padding: 6px 0;
+  opacity: 0;
+  animation: demo-ai-fade 6s linear infinite;
+}
+.landing .demo-ai-text code {
+  font-family: var(--mono);
+  font-size: 13px;
+  background: rgba(122,194,127,0.12);
+  color: #7ac27f;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-style: normal;
+}
+
+/* Illustrative tool-call sequence — wrench icon + tool name + "Result"
+   pill on each line, then ✓ Done at the end. Each row staggers in by ~3% of
+   the 8s loop (≈360ms apart) so it reads as the AI ripping through MCP
+   calls one after another. */
+.landing .demo-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+}
+.landing .demo-tool {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  color: #b8a78a;
+  opacity: 0;
+}
+.landing .demo-tool-icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: #8a7d70;
+}
+.landing .demo-tool-name {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: #e6d5b0;
+  letter-spacing: 0;
+}
+.landing .demo-tool-result {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: #8a7d70;
+  background: rgba(243, 235, 216, 0.06);
+  border: 1px solid rgba(243, 235, 216, 0.1);
+  padding: 2px 7px;
+  border-radius: 5px;
+  margin-left: 2px;
+}
+.landing .demo-tool-done {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0 4px;
+  color: #d6c5a8;
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0;
+}
+.landing .demo-tool-tick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(122, 194, 127, 0.5);
+  color: #7ac27f;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* per-tool fade-in keyframes — one per row so they line up with the master
+   8s clock without animation-delay desync */
+.landing .demo-tool-1     { animation: demo-tool-1     6s linear infinite; }
+.landing .demo-tool-2     { animation: demo-tool-2     6s linear infinite; }
+.landing .demo-tool-3     { animation: demo-tool-3     6s linear infinite; }
+.landing .demo-tool-4     { animation: demo-tool-4     6s linear infinite; }
+.landing .demo-tool-5     { animation: demo-tool-5     6s linear infinite; }
+.landing .demo-tool-done  { animation: demo-tool-done  6s linear infinite; }
+
+@keyframes demo-tool-1 {
+  0%, 32%   { opacity: 0; transform: translateY(3px); }
+  35%       { opacity: 1; transform: translateY(0); }
+  88%       { opacity: 1; }
+  93%, 100% { opacity: 0; }
+}
+@keyframes demo-tool-2 {
+  0%, 36%   { opacity: 0; transform: translateY(3px); }
+  39%       { opacity: 1; transform: translateY(0); }
+  88%       { opacity: 1; }
+  93%, 100% { opacity: 0; }
+}
+@keyframes demo-tool-3 {
+  0%, 40%   { opacity: 0; transform: translateY(3px); }
+  43%       { opacity: 1; transform: translateY(0); }
+  88%       { opacity: 1; }
+  93%, 100% { opacity: 0; }
+}
+@keyframes demo-tool-4 {
+  0%, 44%   { opacity: 0; transform: translateY(3px); }
+  47%       { opacity: 1; transform: translateY(0); }
+  88%       { opacity: 1; }
+  93%, 100% { opacity: 0; }
+}
+@keyframes demo-tool-5 {
+  0%, 48%   { opacity: 0; transform: translateY(3px); }
+  51%       { opacity: 1; transform: translateY(0); }
+  88%       { opacity: 1; }
+  93%, 100% { opacity: 0; }
+}
+@keyframes demo-tool-done {
+  0%, 53%   { opacity: 0; transform: translateY(3px); }
+  56%       { opacity: 1; transform: translateY(0); }
+  88%       { opacity: 1; }
+  93%, 100% { opacity: 0; }
+}
+
+/* dashboard (right pane) */
+.landing .demo-courses {
+  flex: 1;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.landing .demo-course {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  font-family: var(--serif);
+  opacity: 0;
+  transform: translateX(8px);
+}
+.landing .demo-course-code {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--sepia-deep);
+  background: rgba(168,128,74,0.12);
+  padding: 4px 8px;
+  border-radius: 6px;
+  min-width: 36px;
+  text-align: center;
+}
+.landing .demo-course-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+@media (prefers-color-scheme: dark) {
+  .landing .demo-course-code { color: var(--sepia-bright); }
+}
+
+/* per-course staggered reveals — each its own keyframe set so the loop stays
+   in sync with the master 8s clock */
+.landing .demo-course-1 { animation: demo-course-1 6s linear infinite; }
+.landing .demo-course-2 { animation: demo-course-2 6s linear infinite; }
+.landing .demo-course-3 { animation: demo-course-3 6s linear infinite; }
+.landing .demo-course-4 { animation: demo-course-4 6s linear infinite; }
+.landing .demo-course-5 { animation: demo-course-5 6s linear infinite; }
+
+/* keyframes */
+/* pill itself: fade+scale in first (so the empty bubble lands), then sit, then exit */
+@keyframes demo-prompt-pill {
+  0%        { opacity: 0; transform: scale(0.94); }
+  3%        { opacity: 1; transform: scale(1); }
+  88%       { opacity: 1; transform: scale(1); }
+  92%, 100% { opacity: 0; transform: scale(0.98); }
+}
+/* text: stays clipped while the pill lands, then typewriters in */
+@keyframes demo-prompt-type {
+  0%, 6%    { clip-path: inset(0 100% 0 0); animation-timing-function: steps(30, end); }
+  25%       { clip-path: inset(0 0 0 0); animation-timing-function: linear; }
+  88%       { clip-path: inset(0 0 0 0); }
+  92%, 100% { clip-path: inset(0 100% 0 0); }
+}
+
+@keyframes demo-ai-fade {
+  0%, 29%   { opacity: 0; transform: translateY(4px); }
+  35%       { opacity: 1; transform: translateY(0); }
+  85%       { opacity: 1; transform: translateY(0); }
+  92%, 100% { opacity: 0; transform: translateY(2px); }
+}
+
+@keyframes demo-course-1 {
+  0%, 46%   { opacity: 0; transform: translateX(8px); }
+  50%       { opacity: 1; transform: translateX(0); }
+  85%       { opacity: 1; transform: translateX(0); }
+  92%, 100% { opacity: 0; transform: translateX(4px); }
+}
+@keyframes demo-course-2 {
+  0%, 50%   { opacity: 0; transform: translateX(8px); }
+  54%       { opacity: 1; transform: translateX(0); }
+  85%       { opacity: 1; transform: translateX(0); }
+  92%, 100% { opacity: 0; transform: translateX(4px); }
+}
+@keyframes demo-course-3 {
+  0%, 54%   { opacity: 0; transform: translateX(8px); }
+  58%       { opacity: 1; transform: translateX(0); }
+  85%       { opacity: 1; transform: translateX(0); }
+  92%, 100% { opacity: 0; transform: translateX(4px); }
+}
+@keyframes demo-course-4 {
+  0%, 58%   { opacity: 0; transform: translateX(8px); }
+  62%       { opacity: 1; transform: translateX(0); }
+  85%       { opacity: 1; transform: translateX(0); }
+  92%, 100% { opacity: 0; transform: translateX(4px); }
+}
+@keyframes demo-course-5 {
+  0%, 62%   { opacity: 0; transform: translateX(8px); }
+  66%       { opacity: 1; transform: translateX(0); }
+  85%       { opacity: 1; transform: translateX(0); }
+  92%, 100% { opacity: 0; transform: translateX(4px); }
+}
+
+/* ============ § 01 ATTACHMENT PILLS ============ */
+.landing .demo-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 10px 0;
+  border-top: 1px dashed rgba(198,165,114,0.18);
+}
+.landing .demo-attach {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: #c6a572;
+  background: rgba(198,165,114,0.1);
+  border: 1px solid rgba(198,165,114,0.2);
+  padding: 4px 8px;
+  border-radius: 6px;
+  opacity: 0;
+  transform: translateY(4px);
+  white-space: nowrap;
+}
+.landing .demo-attach-1 { animation: demo-attach 6s linear infinite; animation-delay: 0s; }
+.landing .demo-attach-2 { animation: demo-attach 6s linear infinite; animation-delay: 0.15s; }
+.landing .demo-attach-3 { animation: demo-attach 6s linear infinite; animation-delay: 0.3s; }
+.landing .demo-attach-4 { animation: demo-attach 6s linear infinite; animation-delay: 0.45s; }
+@keyframes demo-attach {
+  0%, 22%   { opacity: 0; transform: translateY(4px); }
+  25%       { opacity: 1; transform: translateY(0); }
+  85%       { opacity: 1; transform: translateY(0); }
+  92%, 100% { opacity: 0; transform: translateY(2px); }
+}
+
+/* ============ § 01 STAT TILES (right pane) ============ */
+.landing .demo-stats {
+  flex: 1;
+  padding: 22px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-content: center;
+}
+.landing .demo-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 20px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  opacity: 0;
+  transform: translateY(8px);
+}
+.landing .demo-stat-num {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(28px, 3.4vw, 40px);
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.landing .demo-stat-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--sepia-deep);
+}
+@media (prefers-color-scheme: dark) {
+  .landing .demo-stat-label { color: var(--sepia-bright); }
+}
+
+.landing .demo-stat-1 { animation: demo-stat-1 6s linear infinite; }
+.landing .demo-stat-2 { animation: demo-stat-2 6s linear infinite; }
+.landing .demo-stat-3 { animation: demo-stat-3 6s linear infinite; }
+.landing .demo-stat-4 { animation: demo-stat-4 6s linear infinite; }
+
+@keyframes demo-stat-1 {
+  0%, 60%   { opacity: 0; transform: translateY(8px); }
+  64%       { opacity: 1; transform: translateY(0); }
+  88%       { opacity: 1; transform: translateY(0); }
+  93%, 100% { opacity: 0; transform: translateY(4px); }
+}
+@keyframes demo-stat-2 {
+  0%, 64%   { opacity: 0; transform: translateY(8px); }
+  68%       { opacity: 1; transform: translateY(0); }
+  88%       { opacity: 1; transform: translateY(0); }
+  93%, 100% { opacity: 0; transform: translateY(4px); }
+}
+@keyframes demo-stat-3 {
+  0%, 68%   { opacity: 0; transform: translateY(8px); }
+  72%       { opacity: 1; transform: translateY(0); }
+  88%       { opacity: 1; transform: translateY(0); }
+  93%, 100% { opacity: 0; transform: translateY(4px); }
+}
+@keyframes demo-stat-4 {
+  0%, 72%   { opacity: 0; transform: translateY(8px); }
+  76%       { opacity: 1; transform: translateY(0); }
+  88%       { opacity: 1; transform: translateY(0); }
+  93%, 100% { opacity: 0; transform: translateY(4px); }
+}
+
+/* ============ TELEGRAM MOCK (§ 03 third card) ============ */
+.landing .tg-mock {
+  display: flex;
+  flex-direction: column;
+  background: #17212b;
+  font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.landing .tg-mock-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #1d2733;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.landing .tg-mock-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #1a1512;
+  display: grid;
+  place-items: center;
+  flex: none;
+  overflow: hidden;
+  padding: 6px;
+}
+.landing .tg-mock-avatar img,
+.landing .tg-mock-avatar picture img {
+  width: auto;
+  height: 100%;
+  max-height: 22px;
+  display: block;
+}
+.landing .tg-mock-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.landing .tg-mock-name .tg-mock-sub {
+  font-size: 11px;
+  font-weight: 400;
+  color: #6c7a87;
+  letter-spacing: 0;
+}
+.landing .tg-mock-body {
+  flex: 1;
+  padding: 18px 14px;
+  background:
+    linear-gradient(rgba(0,0,0,0.05), rgba(0,0,0,0.05)),
+    repeating-linear-gradient(45deg, #1c2733 0 8px, #1d2834 8px 16px);
+  display: flex;
+  align-items: flex-start;
+}
+.landing .tg-mock-msg {
+  background: #2b5278;
+  color: #fff;
+  border-radius: 12px;
+  border-bottom-left-radius: 4px;
+  padding: 10px 14px;
+  max-width: 100%;
+  font-size: 13.5px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  position: relative;
+}
+.landing .tg-mock-line {
+  display: block;
+  letter-spacing: 0;
+}
+.landing .tg-mock-line-bold { font-weight: 600; }
+.landing .tg-mock-line-dim { color: rgba(255,255,255,0.65); font-size: 12.5px; }
+.landing .tg-mock-spacer { height: 6px; }
+.landing .tg-mock-time {
+  display: block;
+  text-align: right;
+  font-size: 10.5px;
+  color: rgba(255,255,255,0.55);
+  margin-top: 4px;
+  letter-spacing: 0;
+}

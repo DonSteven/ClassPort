@@ -1,0 +1,9 @@
+# ClassPort security contact (draft v0.1)
+# Served as a static file by the frontend container's Caddy at
+# /.well-known/security.txt (the file lives at that path under public/).
+# RFC 9116 reference: https://www.rfc-editor.org/rfc/rfc9116
+
+Contact: mailto:sihan_long@brown.edu
+Expires: 2027-04-22T00:00:00.000Z
+Preferred-Languages: en, zh
+Canonical: https://your-domain.tld/.well-known/security.txt

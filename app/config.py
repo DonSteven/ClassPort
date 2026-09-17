@@ -1,0 +1,91 @@
+from functools import lru_cache
+from typing import List
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    # Auth
+    # No default — production deploys must set SESSION_SECRET. The setter
+    # below raises if it's left empty so we fail-closed instead of signing
+    # cookies with a publicly-known string.
+    session_secret: str = Field(default="")
+
+    # Operator identity. Defaults match the seed row in the database
+    # baseline. Overrides must match the operator row initialized at deployment.
+    operator_user_id: str = Field(
+        default="00000000-0000-0000-0000-000000000001",
+        description="UUID of the operator user (matches users.id row in DB).",
+    )
+    operator_email: str = Field(
+        default="operator@local",
+        description="Email of the operator user (matches users.email).",
+    )
+    operator_display_name: str = Field(
+        default="Operator",
+        description="Display name of the operator user.",
+    )
+    session_ttl_days: int = 30
+
+    # Expose FastAPI's auto-generated /api/docs (Swagger UI) + /api/openapi.json.
+    # Default OFF — they're recon assist for attackers. Set EXPOSE_DOCS=true
+    # in dev .env if you want them. Production should always be false.
+    expose_docs: bool = False
+
+    # Public origin (scheme+host, no trailing slash) — required for OAuth/MCP URLs.
+    # In prod, set to your public origin (e.g. https://your-domain.tld).
+    public_url: str = Field(default="http://localhost:5173", description="Public URL for building verify/reset email links")
+
+    # Signup (Phase 3+). Default OFF — operator-only deployments don't expose signup.
+    signups_enabled: bool = Field(default=False, description="Allow public signup via /auth/signup")
+
+    # CORS — comma-separated
+    cors_origins: str = "http://localhost:5173,http://localhost:5174"
+
+    # Rate limit
+    login_attempts_window_min: int = 10
+    login_attempts_max: int = 5
+
+    # Dynamic Client Registration (/oauth/register) — per-IP. Every attempt
+    # counts, valid or not: the thing being bounded is unauthenticated row
+    # creation, not brute force. 20/hour is far above what any real MCP
+    # client needs (ChatGPT registers once per connection).
+    register_window_min: int = 60
+    register_max: int = 20
+
+    # OAuth access-token lifetime. Bounds the window a phished consent stays
+    # useful. MCP clients re-run the consent flow on expiry.
+    oauth_token_ttl_days: int = 30
+
+    secrets_encryption_key: str = Field(default="", description="Fernet master key (mint with cryptography.fernet.Fernet.generate_key())")
+
+    # Email — Phase 3+
+    email_backend: str = Field(default="console", description="Email backend: console|gmail_smtp")
+    gmail_smtp_user: str = Field(default="", description="Gmail SMTP username (your gmail address)")
+    gmail_smtp_app_password: str = Field(default="", description="Gmail app-password (16 chars, no spaces in storage)")
+    email_from: str = Field(default="sihan_long@brown.edu", description="From: address for outbound emails")
+    email_from_name: str = Field(default="ClassPort", description="From: name")
+
+    @property
+    def cors_origins_list(self) -> List[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if not self.session_secret or self.session_secret == "dev-only-change-me":
+            raise RuntimeError(
+                "SESSION_SECRET is unset or still the placeholder. "
+                "Generate one with: python -c 'import secrets; "
+                "print(secrets.token_urlsafe(48))'"
+            )
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

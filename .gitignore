@@ -1,0 +1,88 @@
+# dependencies
+node_modules/
+.pnpm-store/
+web/.vite/
+
+# builds
+dist/
+build/
+out/
+web/dist/
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env.production
+.env.development
+.env.docker
+.env.*.local
+!.env.example
+
+# local dev compose override (per-laptop; don't ship — it'd auto-load on
+# self-hosters' machines and override their prod setup)
+docker-compose.override.yml
+docker-compose.override.yaml
+_dev/
+
+# playwright MCP runtime scratch (snapshots, console dumps)
+.playwright-mcp/
+
+# state-of-the-codebase audit docs — local working notes, not for the public repo
+_state/
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+api/.venv/
+mcp/.venv/
+
+# editors
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# vercel
+.vercel/
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+.vercel
+
+# tool-local state
+ROADMAP.md
+launch-posts.md
+CLASSPORT-PLAN.md
+OPS.md
+
+# brand build tooling + internal preview (finished SVG/PNG assets ARE committed)
+docs/brand/preview.html
+docs/brand/wordmark/debug.svg
+scripts/_vectorize_mark.py
+scripts/_build_wordmark.py
+scripts/_remove_watermark.py
+scripts/_export_brand.py
+
+# Personal automation / ops scripts not for distribution. The patterns these
+# implement (cron-trigger reindex, Telegram bot webhook) are generic and live
+# in app/routers/internal.py — what's gitignored here is the maintainer's
+# specific local-laptop and remote-host wiring.
+scripts/laptop-sync.bat
+scripts/_set_password.py
+scripts/n8n-workflows/
+scripts/_deprecated/
+
+# Local planning notes.
+docs/superpowers/
+

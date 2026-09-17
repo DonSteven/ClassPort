@@ -1,0 +1,40 @@
+# Shared ignore list for both Dockerfile (classport) and web/Dockerfile
+# (frontend). The build contexts overlap on the repo root, so anything
+# excluded here disappears from both builds.
+
+# Python build / tooling artefacts
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Frontend artefacts that the build itself produces
+node_modules/
+web/dist/
+web/.vite/
+
+# Dev / docs / git
+.git/
+.github/
+.vscode/
+.idea/
+docs/
+
+# Env files never go into images — env comes from compose env_file.
+.env
+.env.*
+!.env.example
+
+# Other build artefacts
+dist/
+build/
+*.egg-info/
+
+# Local-only
+.DS_Store
+Thumbs.db
+*.swp

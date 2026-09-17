@@ -1,0 +1,14 @@
+# ClassPort — https://your-domain.tld
+# Authenticated app lives behind /login; only the landing page, static brand
+# assets, and the OG card are meant to be crawlable.
+
+User-agent: *
+Allow: /
+Allow: /.well-known/security.txt
+Disallow: /api/
+Disallow: /mcp/
+Disallow: /oauth/
+Disallow: /.well-known/oauth-
+Disallow: /login
+
+Sitemap: https://your-domain.tld/sitemap.xml

@@ -1,0 +1,62 @@
+[project]
+name = "classport-api"
+version = "0.7.0"
+description = "FastAPI backend for the ClassPort app"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115",
+  "pydantic>=2.9",
+  "pydantic-settings>=2.6",
+  "uvicorn[standard]>=0.32",
+  "python-multipart>=0.0.28",
+  "itsdangerous>=2.2",
+  "argon2-cffi>=23.1",
+  "httpx>=0.28",
+  "python-dateutil>=2.9",
+  "tzdata>=2024.2",
+  "mcp>=1.2",
+  "pymupdf>=1.24",
+  "pillow>=10.4",
+  "pyotp>=2.9",
+  "psycopg[binary,pool]>=3.2",
+  "cryptography>=42",
+  "jinja2>=3.1",
+]
+
+[tool.uv]
+package = false
+# Supply-chain cooldown: pinned date instead of rolling "N days" so security
+# pins set today don't conflict with the cooldown window. Bump this when
+# adopting new packages.
+exclude-newer = "2026-05-16T12:00:00Z"
+
+[dependency-groups]
+dev = [
+  "ruff>=0.7",
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+  "testcontainers[postgres]>=4.8",
+  "dirty-equals>=0.8",
+  "psycopg[binary,pool]>=3.2",
+]
+scripts = [
+  "watchdog>=5",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["scripts/_deprecated"]
+
+[tool.ruff.lint.per-file-ignores]
+# main.py imports the routers + mcp_http AFTER setting the httpx log level —
+# httpx logs the full request URL at INFO, which leaks the Telegram bot token.
+# Imports must come after `logging.getLogger("httpx").setLevel(WARNING)`.
+"app/main.py" = ["E402"]
+# Test helper class with single-line method bodies — common pytest idiom.
+"tests/services/test_email.py" = ["E702"]

@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.vite/
+
+# env files never go into the image — build-time vars come from compose ARGs
+.env
+.env.*
+!.env.example
+
+# misc
+.DS_Store
+Thumbs.db
+*.log

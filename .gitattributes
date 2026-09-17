@@ -1,0 +1,23 @@
+# Force LF line endings on files where CRLF would break tooling.
+# Without this, Windows checkouts with `core.autocrlf=true` rewrite LF→CRLF
+# on disk, which changes the SHA-256 of the file and (a) trips the
+# scripts/run_migrations.py drift check vs the prod-applied checksum,
+# (b) breaks shell scripts that get \r\n appended to shebangs.
+
+# Migrations: applied content must be byte-identical across hosts so the
+# _migrations.checksum row matches everywhere.
+migrations/*.sql text eol=lf
+
+# Shell scripts: a stray \r in `#!/usr/bin/env bash` makes execve fail with
+# "no such file or directory" because the kernel looks for `bash\r`.
+*.sh text eol=lf
+deploy.sh text eol=lf
+
+# Dockerfiles: same shebang + multiline-RUN concerns.
+Dockerfile text eol=lf
+*.dockerfile text eol=lf
+
+# Compose / YAML: nothing breaks but keeping them LF avoids noisy diffs
+# between Windows and Linux contributors.
+*.yml text eol=lf
+*.yaml text eol=lf
