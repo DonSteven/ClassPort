@@ -22,6 +22,9 @@ versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
   loopback redirects to use any port while matching scheme, host, path and query.
 - **Zine course tags.** Resize sidebar tags and adjust their font size so
   course codes up to eight characters remain contained.
+- **File previews.** Serve PDF, PNG, JPEG, GIF and WebP with inline
+  disposition so they open in the viewer. Keep other formats as attachments and
+  send `X-Content-Type-Options: nosniff` for file responses.
 
 ### 2026-09-17
 
