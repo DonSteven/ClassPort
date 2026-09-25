@@ -112,7 +112,11 @@
     "behindCount_one": "{{count}} 项落后",
     "behindCount_other": "{{count}} 项落后",
     "noLecturesPlanned": "暂无安排的讲次",
-    "next": "下一个"
+    "next": "下一个",
+    "archive": {
+      "toggle": "已归档（{{count}}）",
+      "hint": "已结束学期的课程。打开课程即可恢复。"
+    }
   },
   "courseDetail": {
     "loadFailed": "无法加载课程。",
@@ -165,7 +169,12 @@
         "title": "暂无课程时段",
         "body": "添加重复时段，建立每周课表。"
       }
-    }
+    },
+    "archive": "归档",
+    "unarchive": "恢复",
+    "archivedBadge": "已归档",
+    "archivedToast": "{{code}} 已归档",
+    "unarchivedToast": "{{code}} 已恢复"
   },
   "tasks": {
     "title": "任务",

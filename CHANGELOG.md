@@ -8,11 +8,20 @@ versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### 2026-09-25
 
+#### Added
+
+- **Course archive.** Archive finished semesters without deleting courses
+  or their files. Hide archived coursework from active dashboards, navigation,
+  tasks and exams; browse or restore it from the courses page. Support the same
+  behavior through `include_archived` dashboard queries and MCP course updates.
+
 #### Fixed
 
 - **OAuth client registration.** Stop deleting registered clients that
   have not completed login, preserving client IDs cached by MCP clients. Allow
   loopback redirects to use any port while matching scheme, host, path and query.
+- **Zine course tags.** Resize sidebar tags and adjust their font size so
+  course codes up to eight characters remain contained.
 
 ### 2026-09-17
 
