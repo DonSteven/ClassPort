@@ -6,6 +6,14 @@ versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### 2026-09-25
+
+#### Fixed
+
+- **OAuth client registration.** Stop deleting registered clients that
+  have not completed login, preserving client IDs cached by MCP clients. Allow
+  loopback redirects to use any port while matching scheme, host, path and query.
+
 ### 2026-09-17
 
 #### Added
