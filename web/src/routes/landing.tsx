@@ -446,8 +446,12 @@ export default function Landing() {
               <span className="line"><span className="dol">$</span>git clone https://github.com/DonSteven/ClassPort</span>
               <span className="line"><span className="dol">$</span>cd ClassPort</span>
               <span className="line"><span className="dol">$</span>cp .env.example .env</span>
-              <span className="line"><span className="dol">$</span>vim .env              <span className="cmt"># APP_PASSWORD_HASH, SESSION_SECRET</span></span>
-              <span className="line"><span className="dol">$</span>vim .env.docker       <span className="cmt"># POSTGRES_USER / _PASSWORD / _DB</span></span>
+              <span className="line"><span className="dol">$</span>cp .env.migration.example .env.migration</span>
+              <span className="line"><span className="dol">$</span>cp .env.docker.example .env.docker</span>
+              <span className="line"><span className="dol">$</span>vim .env              <span className="cmt"># runtime DATABASE_URL, SESSION_SECRET</span></span>
+              <span className="line"><span className="dol">$</span>vim .env.migration    <span className="cmt"># migration URL, APP_PASSWORD_HASH</span></span>
+              <span className="line"><span className="dol">$</span>vim .env.docker       <span className="cmt"># local Postgres / public build settings</span></span>
+              <span className="line"><span className="cmt">  # Provision database roles: docs/DATABASE.md</span></span>
               <span className="line"><span className="dol">$</span>./deploy.sh</span>
               <span className="line"><span className="out">  ✓ classport-postgres   (internal)</span></span>
               <span className="line"><span className="out">  ✓ classport-api        :8000</span></span>

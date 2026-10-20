@@ -23,6 +23,7 @@ web/.vite/
 .vscode/
 .idea/
 docs/
+certs/
 
 # Env files never go into images — env comes from compose env_file.
 .env

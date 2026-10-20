@@ -11,13 +11,14 @@
 
 services:
   postgres:
+    profiles: [local-db]
     image: postgres:16-alpine
     container_name: classport-postgres
     restart: unless-stopped
     env_file:
       - path: .env.docker
         format: raw
-        required: true
+        required: false
     environment:
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
     volumes:
@@ -40,25 +41,19 @@ services:
     container_name: classport
     restart: unless-stopped
     env_file:
-      # format: raw disables ${VAR} interpolation inside values — required so
-      # APP_PASSWORD_HASH ("$argon2id$v=19$m=...") isn't mangled by compose
-      # treating $argon2id, $v, $m as undefined variables.
+      # Runtime settings only. Database administration credentials belong in
+      # .env.migration / .env.docker, neither of which is loaded here.
       - path: .env
-        format: raw
-        required: true
-      - path: .env.docker
         format: raw
         required: true
     environment:
       # Tell the storage layer where the canonical course tree lives.
       STUDY_ROOT: "/opt/courses"
-    depends_on:
-      postgres:
-        condition: service_healthy
     volumes:
       # Bind mount, not volume — files live on the host, container reads/writes
       # them in place. Same path inside and outside for sanity.
       - /opt/courses:/opt/courses:rw
+      - ./certs:/etc/classport/certs:ro
     ports:
       # Bind to localhost only; Caddy on the host reverse-proxies in.
       - "127.0.0.1:8000:8000"
@@ -68,6 +63,20 @@ services:
       timeout: 5s
       retries: 6
       start_period: 30s
+    networks: [internal]
+
+  migrate:
+    profiles: [maintenance]
+    image: classport:latest
+    command: ["uv", "run", "--no-sync", "python", "scripts/run_migrations.py"]
+    env_file:
+      - path: .env.migration
+        format: raw
+        # Running the app does not require a maintenance env file. deploy.sh
+        # checks it before maintenance; direct runs validate the DSN in Python.
+        required: false
+    volumes:
+      - ./certs:/etc/classport/certs:ro
     networks: [internal]
 
   frontend:

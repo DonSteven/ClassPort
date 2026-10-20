@@ -10,7 +10,6 @@ or cursor-level control, `async with db() as conn:` checks one out.
 """
 from __future__ import annotations
 
-import os
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -20,6 +19,8 @@ from psycopg import pq
 from psycopg.adapt import Loader
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
+
+from .db_config import get_pool_config, get_runtime_dsn
 
 
 # ── new async pool ────────────────────────────────────────────────────────────
@@ -75,27 +76,18 @@ async def _configure_connection(conn) -> None:
     conn.adapters.register_loader("uuid", _StrUUIDLoaderBinary)
 
 
-def _build_dsn() -> str:
-    """Build the Postgres DSN from POSTGRES_* env vars (same shape as
-    scripts/run_migrations.py uses)."""
-    user = os.environ["POSTGRES_USER"]
-    pw = os.environ["POSTGRES_PASSWORD"]
-    db_ = os.environ["POSTGRES_DB"]
-    host = os.environ.get("PGHOST", "postgres")
-    port = os.environ.get("PGPORT", "5432")
-    return f"postgresql://{user}:{pw}@{host}:{port}/{db_}"
-
-
 async def init_pool(dsn: str | None = None) -> None:
     """Create the global async pool. Idempotent — safe to call once during
     app startup. The lifespan in app/main.py is the canonical caller."""
     global _pool
     if _pool is not None:
         return
+    config = get_pool_config()
     _pool = AsyncConnectionPool(
-        dsn or _build_dsn(),
-        min_size=2,
-        max_size=10,
+        dsn if dsn is not None else get_runtime_dsn(),
+        min_size=config.min_size,
+        max_size=config.max_size,
+        timeout=config.timeout,
         open=False,
         # dict_row factory — every cursor returns dict-shaped rows so
         # services use `row["column"]` access (same shape Pydantic's

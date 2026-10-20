@@ -13,6 +13,12 @@ versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
 - **Deployment gates.** Run backend tests, lint, a Docker build, Compose
   validation and the frontend production build before deployment. Resolve one
   commit and deploy the same revision that passed those checks.
+- **Database configuration.** Share PostgreSQL URL, TLS, connection-timeout
+  and pool settings between the application and maintenance tools. Separate
+  runtime `DATABASE_URL` from maintenance-only `MIGRATION_DATABASE_URL`.
+- **Local deployment.** Run migrations and operator initialization in a
+  dedicated maintenance service, support external PostgreSQL through
+  `--external-db`, and save the previous application images before rebuilding.
 
 ### 2026-09-25
 

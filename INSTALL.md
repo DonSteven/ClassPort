@@ -53,31 +53,39 @@ guide. Anywhere else works; just adjust the paths below.
 
 ## 3. Generate secrets and write the env files
 
-ClassPort reads two env files, both kept out of git:
+ClassPort keeps runtime and maintenance credentials in separate env files:
 
-- **`.env`** — application secrets and operator identity, read by the
-  FastAPI container at startup and at deploy time by
-  `scripts/seed_operator_password.py`.
-- **`.env.docker`** — Postgres credentials only, used by Docker Compose
-  to provision and reach the database container.
+- **`.env`** — runtime `DATABASE_URL` and application settings, read by FastAPI.
+- **`.env.migration`** — `MIGRATION_DATABASE_URL` and operator initialization
+  settings, read only by the one-shot maintenance service.
+- **`.env.docker`** — local Postgres bootstrap credentials and public frontend
+  build settings. Never injected into FastAPI.
+
+See [database setup](docs/DATABASE.md) for first-time role provisioning, existing
+installations, pool settings, and RDS TLS configuration. Both URLs connect to the
+same database with different roles. Role provisioning is an administrator step.
 
 ### `.env` — required vars
 
-Copy the template, then fill in at minimum these five variables:
+Copy the templates, then fill in the runtime and maintenance values:
 
 ```bash
 cp .env.example .env
+cp .env.migration.example .env.migration
+cp .env.docker.example .env.docker
 ```
 
 | Variable | How to generate / what to put |
 |---|---|
-| `OPERATOR_EMAIL` | Your login email address. This is the username you'll use at `/login`. |
-| `APP_PASSWORD_HASH` | Run `uv run python -m app.tools.hashpw` and paste the output (`$argon2id$...`). |
+| `DATABASE_URL` | Runtime database login; separate from the migration login. |
 | `SESSION_SECRET` | `python3 -c 'import secrets; print(secrets.token_urlsafe(48))'` |
 | `SECRETS_ENCRYPTION_KEY` | `python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'` |
 | `PUBLIC_URL` | The public origin of your deploy, e.g. `https://your-domain.tld`. Used in OAuth callbacks and email links. Leave blank for local dev (derived from the inbound request). |
 
+In `.env.migration`, set `MIGRATION_DATABASE_URL`, `OPERATOR_EMAIL` (your login
+email), and `APP_PASSWORD_HASH` (generate with `uv run python -m app.tools.hashpw`).
 `OPERATOR_DISPLAY_NAME` defaults to `"Operator"` — set it to your name if you like.
+Set initialization values in this maintenance file, not the runtime file.
 
 `SIGNUPS_ENABLED` defaults to `false` (operator-only). Set to `true` to open public registration.
 
@@ -96,13 +104,13 @@ Telegram credentials are per-user — each user configures their own bot token a
 ### `.env.docker` — Postgres credentials
 
 ```bash
-cat > .env.docker <<EOF
-POSTGRES_USER=classport
-POSTGRES_PASSWORD=$(openssl rand -hex 24)
-POSTGRES_DB=classport
-EOF
-chmod 600 .env .env.docker
+chmod 600 .env .env.migration .env.docker
 ```
+
+For a fresh local database, fill `POSTGRES_*` in `.env.docker` to match the
+migration login. Provision and grant access to the separate runtime role as
+described in [database setup](docs/DATABASE.md#first-local-deployment) before the
+first complete deploy. Do not change bootstrap credentials on an existing volume.
 
 Optionally bake your domain into the frontend image at build time (affects canonical tags, OG metadata, sitemap, and manifest):
 
@@ -120,17 +128,23 @@ PUBLIC_SHOW_LANDING=false
 ./deploy.sh
 ```
 
+For RDS or another existing PostgreSQL server, configure both URLs and TLS as
+described in [database setup](docs/DATABASE.md#rds--external-postgresql), then use
+`./deploy.sh --external-db`. Keep that flag on later external-database deployments.
+
 `deploy.sh` does, in order:
 
 1. Pre-flight (compose validation, disk space, env-file presence).
 2. Tags the currently running image as `classport:previous` so it can roll back.
 3. Builds a fresh `classport:latest` image from the `Dockerfile`.
-4. Starts the Postgres container, waits for `pg_isready`.
-5. Runs `scripts/run_migrations.py` against Postgres (idempotent — re-applies
+4. Starts local Postgres and waits for health, unless `--external-db` is set.
+5. Runs the one-shot `migrate` service using `.env.migration` (idempotent — re-applies
    nothing that's already been recorded in the `_migrations` table).
-6. Starts the classport container.
-7. Polls `GET http://127.0.0.1:8000/api/health` for up to 60 s.
-8. **Pass:** prunes dangling images, exits 0.
+6. Runs file-layout initialization and operator initialization. The operator seed
+   uses the maintenance service and migration identity.
+7. Starts the runtime-only backend and recreates the frontend container.
+8. Polls `GET http://127.0.0.1:8000/api/health` for up to 60 s.
+9. **Pass:** prunes dangling images, exits 0.
    **Fail:** re-tags `:previous` as `:latest`, recreates the container, waits
    for the previous build's health to come back, exits non-zero.
 
@@ -147,7 +161,7 @@ You should also see the running containers (`classport`, `classport-postgres`,
 ### First-time operator login
 
 `./deploy.sh` automatically invokes `scripts/seed_operator_password.py`
-after migrations. That script reads your `.env` and reconciles the operator
+after migrations. That script reads `.env.migration` and reconciles the operator
 row in the `users` table:
 
 - If `OPERATOR_EMAIL` is set, it ensures a user row with that email exists.
@@ -165,7 +179,7 @@ After the first `./deploy.sh`:
    env vars required).
 
 If you need to reset the operator password later, update `APP_PASSWORD_HASH`
-in `.env` and delete the existing `password_hash` in the database, then
+in `.env.migration` and delete the existing `password_hash` in the database, then
 redeploy — the seed script will write the new hash.
 
 ### Restoring data into a fresh box
@@ -174,10 +188,10 @@ If you're moving from another deployment (or restoring a backup), apply
 your data dump after step 5 but before bringing up the classport container:
 
 ```bash
-docker compose --env-file .env.docker up -d postgres
-docker compose --env-file .env.docker run --rm --no-deps classport \
+docker compose --env-file .env.docker --profile local-db up -d --wait postgres
+docker compose --env-file .env.docker run --rm --no-deps migrate \
   uv run --no-sync python scripts/run_migrations.py
-docker exec -i classport-postgres psql -U classport -d classport < your-data.sql
+docker exec -i classport-postgres psql -U classport_migrator -d classport < your-data.sql
 ./deploy.sh --skip-build   # then continue with the normal deploy
 ```
 
@@ -351,7 +365,9 @@ common cause: `.env.docker` missing a key, or compose version below 2.30.
 
 **`/api/health` returns `{"ok": false, "db": "error: ..."}`.**
 The FastAPI container can't reach Postgres. Check `docker logs classport-postgres`
-for boot errors; verify the values in `.env.docker` match what's in
+for boot errors; verify `DATABASE_URL` in `.env` uses the provisioned runtime
+role and that `.env.migration` uses the migration role. Bootstrap values in
+`.env.docker` must match what's in
 `/opt/postgres-data/` (the directory persists between runs — if you
 changed the password after first boot, Postgres is still using the old one).
 
@@ -362,11 +378,11 @@ should show your course tree.
 
 **Login returns 401 with the right password.**
 Re-hash the password with `uv run python -m app.tools.hashpw`, update
-`APP_PASSWORD_HASH` in `.env` (not `.env.docker`), then manually clear the
+`APP_PASSWORD_HASH` in `.env.migration`, then manually clear the
 existing hash in the database so the seed script writes the new one:
 
 ```bash
-docker exec -it classport-postgres psql -U classport -d classport \
+docker exec -it classport-postgres psql -U classport_migrator -d classport \
   -c "UPDATE users SET password_hash = NULL WHERE email = 'your-email@example.com';"
 ./deploy.sh
 ```

@@ -71,38 +71,20 @@ cd ClassPort
 cd web && pnpm install && cd ..
 ```
 
-**2. 生成密钥并配置 `.env` 文件。**
-
-打开 `.env`，填写必填配置：
+**2. 分别配置运行和维护凭证。**
 
 ```bash
 cp .env.example .env
-
-# 设置登录邮箱，该邮箱将作为用户名：
-#   OPERATOR_EMAIL=you@example.com
-
-# 生成密码哈希，填入 APP_PASSWORD_HASH：
-uv run python -m app.tools.hashpw
-# → 将输出的 $argon2id$... 字符串填入 APP_PASSWORD_HASH
-
-# 生成会话签名密钥：
-python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
-# → 填入 SESSION_SECRET
-
-# 生成用户凭证的加密密钥：
-python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
-# → 填入 SECRETS_ENCRYPTION_KEY
-
-# 生成 PostgreSQL 密码并写入 Docker 专用环境文件：
-cat > .env.docker <<EOF
-POSTGRES_USER=classport
-POSTGRES_PASSWORD=$(openssl rand -hex 24)
-POSTGRES_DB=classport
-EOF
-chmod 600 .env .env.docker
+cp .env.migration.example .env.migration
+cp .env.docker.example .env.docker
+chmod 600 .env .env.migration .env.docker
 ```
 
-`.env` 保存应用密钥；`.env.docker` 保存由 Compose 注入 PostgreSQL 容器的数据库凭证。两者都已列入 `.gitignore`。
+将 `DATABASE_URL`、`SESSION_SECRET` 和 `SECRETS_ENCRYPTION_KEY` 写入 `.env`；将 `MIGRATION_DATABASE_URL`、`OPERATOR_EMAIL` 和 `APP_PASSWORD_HASH` 写入 `.env.migration`。使用 `uv run python -m app.tools.hashpw` 生成密码哈希。
+
+两个 URL 指向同一数据库，但使用不同角色。后端只读取 `.env`，维护任务只读取 `.env.migration`；`.env.docker` 保存本地 PostgreSQL 凭证与公开的前端构建配置。
+
+[数据库配置指南](docs/DATABASE.md) 介绍首次创建角色、已有环境接入、连接池，以及 RDS 的 TLS 连接设置。
 
 **3. 启动应用。**
 
@@ -110,7 +92,9 @@ chmod 600 .env .env.docker
 ./deploy.sh
 ```
 
-`deploy.sh` 验证 Compose 配置、构建 `classport` 镜像、在 PostgreSQL 容器中执行待应用迁移、启动服务，并轮询 `GET /api/health`，最多等待 60 秒。健康检查未通过时会自动回退到上一个镜像。
+`deploy.sh` 验证 Compose 配置、构建 `classport` 镜像、使用维护凭证完成迁移和账户初始化、启动前后端，并轮询 `GET /api/health`，最多等待 60 秒。健康检查未通过时会自动回退到上一个镜像。
+
+使用 RDS 或外部 PostgreSQL 时，每次部署执行 `./deploy.sh --external-db`。
 
 后端现在运行于 `http://127.0.0.1:8000`，可这样验证：
 

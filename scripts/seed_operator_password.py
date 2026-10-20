@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Seed / reconcile the operator user from .env vars.
+"""Seed / reconcile the operator user using maintenance environment variables.
 
-Reads from the container's env (`env_file: .env`):
+Reads from the maintenance container's env (`env_file: .env.migration`):
+  - MIGRATION_DATABASE_URL — database identity for initialization.
   - OPERATOR_USER_ID    — UUID of the operator row. Defaults to the migration's
                           placeholder UUID. Self-hosters may pick a fresh one
                           via `uuidgen` and set it here.
@@ -20,12 +21,19 @@ Behaviour:
     hash is NULL (avoid clobbering a password the operator changed via the UI).
 """
 from __future__ import annotations
-import asyncio
 import os
 import sys
+from pathlib import Path
+
+import psycopg
+from psycopg.rows import dict_row
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from app.db_config import get_migration_dsn  # noqa: E402
 
 
-async def main() -> int:
+def main() -> int:
     op_user_id = os.environ.get(
         "OPERATOR_USER_ID", "00000000-0000-0000-0000-000000000001"
     ).strip()
@@ -35,31 +43,24 @@ async def main() -> int:
 
     if not op_email:
         print(
-            "OPERATOR_EMAIL not set in .env — skipping operator seed. "
+            "OPERATOR_EMAIL not set in .env.migration — skipping operator seed. "
             "Set it to your login email and redeploy."
         )
         return 0
 
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from app import db as db_module
-
-    await db_module.init_pool()
-    try:
-        existing = await db_module.fetchrow(
+    with psycopg.connect(get_migration_dsn(), row_factory=dict_row) as conn:
+        existing = conn.execute(
             "SELECT id, email, display_name, password_hash FROM users WHERE id = %s",
-            op_user_id,
-        )
+            (op_user_id,),
+        ).fetchone()
 
         if existing is None:
             # Operator picked a new UUID; create the row.
-            await db_module.execute(
+            conn.execute(
                 "INSERT INTO users (id, email, display_name, password_hash) "
                 "VALUES (%s, %s, %s, %s) "
                 "ON CONFLICT (id) DO NOTHING",
-                op_user_id,
-                op_email,
-                op_display or "Operator",
-                app_pw_hash or None,
+                (op_user_id, op_email, op_display or "Operator", app_pw_hash or None),
             )
             print(
                 f"created operator row id={op_user_id} email={op_email} "
@@ -82,21 +83,19 @@ async def main() -> int:
             values.append(app_pw_hash)
 
         if not updates:
-            print(f"operator {op_user_id} already matches .env — nothing to do")
+            print(f"operator {op_user_id} already matches .env.migration — nothing to do")
             return 0
 
         values.append(op_user_id)
         sql = f"UPDATE users SET {', '.join(updates)} WHERE id = %s"
-        await db_module.execute(sql, *values)
+        conn.execute(sql, values)
         print(
             f"updated operator {op_user_id}: " + ", ".join(
                 u.split(" = ")[0] for u in updates
             )
         )
         return 0
-    finally:
-        await db_module.close_pool()
 
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(main()))
+    sys.exit(main())

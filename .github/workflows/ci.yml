@@ -24,7 +24,8 @@ jobs:
       - name: Prepare test configuration
         run: |
           cp .env.ci .env
-          cp .env.ci .env.docker
+          cp .env.docker.example .env.docker
+          cp .env.migration.example .env.migration
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -38,7 +39,10 @@ jobs:
       - name: Backend tests
         run: uv run --no-sync pytest
       - name: Validate Compose
-        run: docker compose -f docker-compose.yml --env-file .env.docker config -q
+        run: |
+          docker compose -f docker-compose.yml --env-file .env.docker --profile local-db --profile maintenance config -q
+          docker compose -f docker-compose.yml --env-file .env.docker config -q
+          bash -n deploy.sh
       - name: Docker build smoke
         run: docker build -t classport:ci-smoke .
 

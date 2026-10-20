@@ -7,14 +7,15 @@
 #   ./deploy.sh --skip-build # skip image rebuild (useful for env-only changes)
 #   ./deploy.sh --no-rollback # halt on health failure but don't auto-rollback (debugging)
 #   ./deploy.sh --status     # print current image tags + container health and exit
+#   ./deploy.sh --external-db # use an existing PostgreSQL / RDS, skip local Postgres
 #
 # Environment variables (for --pull):
 #   CLASSPORT_DEPLOY_REF  git ref to reset to (default: origin/main); e.g. a version tag like v0.7.2
 #
 # Behaviour:
 #   1. Pre-flight: validate compose, check disk space, check .env files exist.
-#   2. Build a new classport image (unless --skip-build).
-#   3. Tag the currently-running image as classport:previous (rollback target).
+#   2. Tag the currently-running image as classport:previous (rollback target).
+#   3. Build new backend and frontend images (unless --skip-build).
 #   4. Apply pending migrations against the live postgres (still running).
 #   5. Recreate the classport container with the new image.
 #   6. Poll http://127.0.0.1:8000/api/health for up to 60s.
@@ -27,9 +28,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-# Compose substitution source: only .env.docker (POSTGRES_*). Service-level
-# env_file: directives separately inject .env into the classport container
-# without $-substitution, so APP_PASSWORD_HASH stays intact.
+# .env.docker supplies Compose build / local Postgres settings. Service-level
+# env_file directives separately inject runtime and maintenance credentials.
 COMPOSE="docker compose --env-file .env.docker"
 
 LOG="$PWD/classport-deploy.log"
@@ -41,9 +41,11 @@ SKIP_BUILD=0
 NO_ROLLBACK=0
 SHOW_STATUS=0
 PULL=0
+EXTERNAL_DB=0
 for arg in "$@"; do
     case "$arg" in
         --pull)        PULL=1 ;;
+        --external-db) EXTERNAL_DB=1 ;;
         --skip-build)  SKIP_BUILD=1 ;;
         --no-rollback) NO_ROLLBACK=1 ;;
         --status)      SHOW_STATUS=1 ;;
@@ -51,6 +53,10 @@ for arg in "$@"; do
         *) echo "unknown flag: $arg" >&2; exit 2 ;;
     esac
 done
+
+if [ "$EXTERNAL_DB" -eq 0 ]; then
+    COMPOSE="$COMPOSE --profile local-db"
+fi
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -118,6 +124,7 @@ log "=== deploy starting ==="
 [ -f docker-compose.yml ] || { err "docker-compose.yml missing"; exit 1; }
 [ -f .env ]               || { err ".env missing — backend secrets file";  exit 1; }
 [ -f .env.docker ]        || { err ".env.docker missing — postgres secrets"; exit 1; }
+[ -f .env.migration ]     || { err ".env.migration missing — maintenance credentials"; exit 1; }
 [ -f Dockerfile ]         || { err "Dockerfile missing"; exit 1; }
 
 log "validating docker-compose.yml..."
@@ -154,21 +161,24 @@ fi
 
 # ── ensure postgres is up before migrating ───────────────────────────────────
 
-log "ensuring postgres is up..."
-$COMPOSE up -d postgres
-# wait for healthy
-for _ in $(seq 1 30); do
-    pg_health=$(docker inspect --format='{{.State.Health.Status}}' classport-postgres 2>/dev/null || echo "starting")
-    [ "$pg_health" = "healthy" ] && break
-    sleep 1
-done
-[ "$pg_health" = "healthy" ] || { err "postgres did not become healthy"; exit 1; }
-log "postgres: healthy"
+if [ "$EXTERNAL_DB" -eq 0 ]; then
+    log "ensuring local postgres is up..."
+    $COMPOSE up -d postgres
+    for _ in $(seq 1 30); do
+        pg_health=$(docker inspect --format='{{.State.Health.Status}}' classport-postgres 2>/dev/null || echo "starting")
+        [ "$pg_health" = "healthy" ] && break
+        sleep 1
+    done
+    [ "$pg_health" = "healthy" ] || { err "postgres did not become healthy"; exit 1; }
+    log "postgres: healthy"
+else
+    log "using external database; skipping local postgres (migration runner checks connectivity)"
+fi
 
 # ── migrate ──────────────────────────────────────────────────────────────────
 
 log "running migrations..."
-if ! $COMPOSE run --rm --no-deps classport uv run --no-sync python scripts/run_migrations.py 2>&1 | tee -a "$LOG"; then
+if ! $COMPOSE run --rm --no-deps migrate 2>&1 | tee -a "$LOG"; then
     err "migration failed — aborting before swapping containers (postgres untouched if migration ran in transaction)"
     exit 1
 fi
@@ -184,12 +194,10 @@ if [[ -x ./scripts/migrate_study_root.sh ]]; then
     }
 fi
 
-# Phase 3+: reconcile operator user from .env (email, display_name, password_hash).
-# Run inside a fresh container so the .env env_file is loaded — the host shell
-# doesn't have these vars. The script's own env-checks decide whether to skip.
+# Reconcile the operator using maintenance credentials and initialization values.
 if [[ -x ./scripts/seed_operator_password.py ]]; then
-    log "reconciling operator user from .env (idempotent)..."
-    $COMPOSE run --rm --no-deps classport uv run --no-sync python scripts/seed_operator_password.py 2>&1 | tee -a "$LOG" || {
+    log "reconciling operator user from .env.migration (idempotent)..."
+    $COMPOSE run --rm --no-deps migrate uv run --no-sync python scripts/seed_operator_password.py 2>&1 | tee -a "$LOG" || {
         err "operator seed failed — investigate"
         exit 1
     }
@@ -198,9 +206,7 @@ fi
 # ── roll forward ─────────────────────────────────────────────────────────────
 
 log "starting new classport + recreating frontend..."
-# --remove-orphans cleans up the classport-postgrest container left over
-# from before Batch C1 retired PostgREST.
-$COMPOSE up -d --remove-orphans classport
+$COMPOSE up -d classport
 # Force-recreate frontend so it picks up its newly built image — without
 # this, the running frontend container keeps serving the previous build
 # even though `compose build` just produced a fresh image.

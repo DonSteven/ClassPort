@@ -16,8 +16,14 @@ web/dist/
 .env.production
 .env.development
 .env.docker
+.env.migration
 .env.*.local
 !.env.example
+!.env.docker.example
+!.env.migration.example
+
+# Downloaded public database CA bundles (mounted read-only, never image layers).
+certs/*.pem
 
 # local dev compose override (per-laptop; don't ship — it'd auto-load on
 # self-hosters' machines and override their prod setup)

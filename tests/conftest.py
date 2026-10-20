@@ -69,11 +69,7 @@ def pg_url() -> str:
         # Apply the baseline migration via run_migrations.py
         env = {
             **os.environ,
-            "POSTGRES_USER": "classport",
-            "POSTGRES_PASSWORD": "testpw",
-            "POSTGRES_DB": "classport_test",
-            "PGHOST": pg.get_container_host_ip(),
-            "PGPORT": str(pg.get_exposed_port(5432)),
+            "MIGRATION_DATABASE_URL": dsn,
         }
         result = subprocess.run(
             [sys.executable, str(REPO_ROOT / "scripts" / "run_migrations.py")],

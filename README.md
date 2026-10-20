@@ -73,38 +73,27 @@ cd ClassPort
 cd web && pnpm install && cd ..
 ```
 
-**2. Generate secrets and write `.env` files.**
-
-Open `.env` and fill in the required values:
+**2. Configure separate runtime and maintenance credentials.**
 
 ```bash
 cp .env.example .env
-
-# Set your login email (this becomes your username):
-#   OPERATOR_EMAIL=you@example.com
-
-# Hash a password for first login and paste as APP_PASSWORD_HASH:
-uv run python -m app.tools.hashpw
-# → paste the resulting $argon2id$... string as APP_PASSWORD_HASH
-
-# Generate a session-cookie signing secret:
-python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
-# → paste as SESSION_SECRET
-
-# Generate the encryption key for per-user secrets (Telegram tokens, etc.):
-python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
-# → paste as SECRETS_ENCRYPTION_KEY
-
-# Generate a Postgres password and write the Docker-only env file:
-cat > .env.docker <<EOF
-POSTGRES_USER=classport
-POSTGRES_PASSWORD=$(openssl rand -hex 24)
-POSTGRES_DB=classport
-EOF
-chmod 600 .env .env.docker
+cp .env.migration.example .env.migration
+cp .env.docker.example .env.docker
+chmod 600 .env .env.migration .env.docker
 ```
 
-`.env` holds your application secrets. `.env.docker` holds the Postgres credentials that compose injects into the postgres container. Both are in `.gitignore`.
+Set `DATABASE_URL`, `SESSION_SECRET`, and `SECRETS_ENCRYPTION_KEY` in
+`.env`. Set `MIGRATION_DATABASE_URL`, your `OPERATOR_EMAIL`, and
+`APP_PASSWORD_HASH` in `.env.migration`. Generate the password hash with
+`uv run python -m app.tools.hashpw`; generate separate random database passwords.
+
+The URLs target the same database using different roles. The backend loads only
+`.env`; maintenance loads only `.env.migration`. The local PostgreSQL
+container loads `.env.docker`, which also supplies public frontend build settings.
+
+Follow [database setup](docs/DATABASE.md) to provision the roles and grants before
+the first deploy, or to adapt an existing installation. That guide also covers
+pool settings and verified TLS connections to RDS.
 
 **3. Bring up the stack.**
 
@@ -112,7 +101,9 @@ chmod 600 .env .env.docker
 ./deploy.sh
 ```
 
-`deploy.sh` validates compose, builds the classport image, applies any pending migrations against the Postgres container, starts everything, then polls `GET /api/health` for up to 60 s. If health doesn't go green it auto-rolls back to the previously deployed image.
+`deploy.sh` validates compose, builds the classport image, runs migrations and operator initialization with maintenance credentials, starts the runtime backend and frontend, then polls `GET /api/health` for up to 60 s. If health doesn't go green it auto-rolls back to the previously deployed image.
+
+For RDS / external PostgreSQL, use `./deploy.sh --external-db` on every deploy to skip local Postgres.
 
 The backend is now live at `http://127.0.0.1:8000`. Verify:
 

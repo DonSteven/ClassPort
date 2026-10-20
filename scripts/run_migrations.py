@@ -8,36 +8,30 @@ so a failure aborts cleanly with no partial state.
 
 Invoked automatically by `./deploy.sh` before the classport container starts,
 and runnable ad-hoc via:
-    docker compose run --rm --no-deps classport \\
+    docker compose run --rm --no-deps migrate \\
         uv run --no-sync python scripts/run_migrations.py
 
-Connection string is built from the standard Postgres env vars
-(`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`) and assumes the
-Postgres container is reachable at hostname `postgres` (the internal
-docker service name). Override with `PGHOST` / `PGPORT` if running outside
-the default compose network.
+Requires MIGRATION_DATABASE_URL for the maintenance identity.
+The shared configuration module does not require Web application settings.
 """
 from __future__ import annotations
 
 import hashlib
-import os
 import sys
 import time
 from pathlib import Path
 
 import psycopg
+from psycopg.conninfo import conninfo_to_dict
 
 
-MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from app.db_config import get_migration_dsn  # noqa: E402
 
 
-def conn_str() -> str:
-    user = os.environ["POSTGRES_USER"]
-    pw = os.environ["POSTGRES_PASSWORD"]
-    db = os.environ["POSTGRES_DB"]
-    host = os.environ.get("PGHOST", "postgres")
-    port = os.environ.get("PGPORT", "5432")
-    return f"postgresql://{user}:{pw}@{host}:{port}/{db}"
+MIGRATIONS_DIR = REPO_ROOT / "migrations"
 
 
 def wait_for_postgres(dsn: str, timeout_s: int = 60) -> None:
@@ -46,7 +40,7 @@ def wait_for_postgres(dsn: str, timeout_s: int = 60) -> None:
     last_err: Exception | None = None
     while time.monotonic() < deadline:
         try:
-            with psycopg.connect(dsn, connect_timeout=3) as c:
+            with psycopg.connect(dsn) as c:
                 c.execute("SELECT 1")
                 return
         except Exception as e:
@@ -198,8 +192,12 @@ def apply(conn: psycopg.Connection, sql_file: Path) -> None:
 
 
 def main() -> int:
-    dsn = conn_str()
-    print(f"migrations: connecting to {dsn.split('@')[-1]}...")
+    dsn = get_migration_dsn()
+    target = conninfo_to_dict(dsn)
+    print(
+        f"migrations: connecting to {target.get('host', 'localhost')}:"
+        f"{target.get('port', '5432')}/{target.get('dbname', '')}..."
+    )
     wait_for_postgres(dsn)
     with psycopg.connect(dsn, autocommit=False) as conn:
         ensure_migrations_table(conn)
