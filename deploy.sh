@@ -32,7 +32,7 @@ cd "$(dirname "$0")"
 # without $-substitution, so APP_PASSWORD_HASH stays intact.
 COMPOSE="docker compose --env-file .env.docker"
 
-LOG=/var/log/classport-deploy.log
+LOG="$PWD/classport-deploy.log"
 HEALTH_URL=http://127.0.0.1:8000/api/health
 HEALTH_TIMEOUT=60   # seconds
 HEALTH_INTERVAL=2   # seconds

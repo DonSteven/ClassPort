@@ -6,6 +6,14 @@ versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### 2026-10-20
+
+#### Changed
+
+- **Deployment gates.** Run backend tests, lint, a Docker build, Compose
+  validation and the frontend production build before deployment. Resolve one
+  commit and deploy the same revision that passed those checks.
+
 ### 2026-09-25
 
 #### Added

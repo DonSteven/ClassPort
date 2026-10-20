@@ -16,8 +16,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  resolve:
+    name: Resolve deployment commit
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - name: Select deployment ref
+        id: target
+        env:
+          DEPLOY_REF: ${{ inputs.ref || github.sha }}
+        run: echo "ref=${DEPLOY_REF#origin/}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.target.outputs.ref }}
+      - name: Resolve commit SHA
+        id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  checks:
+    name: Pre-deploy checks
+    needs: resolve
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.resolve.outputs.sha }}
+
   deploy:
     name: SSH deploy to Hetzner
+    needs: [resolve, checks]
     runs-on: ubuntu-latest
     steps:
       - name: Deploy via SSH
@@ -31,14 +57,9 @@ jobs:
           script: |
             set -euo pipefail
             cd /opt/classport
-            REF="${{ github.event.inputs.ref || github.ref_name }}"
-            # Normalize bare branch names to origin/<branch> so the reset
-            # picks up the freshly-fetched commits, not the stale local branch.
-            if [[ "$REF" != origin/* && "$REF" != v* ]]; then
-              REF="origin/$REF"
-            fi
-            echo "Deploying ref: $REF"
+            DEPLOY_SHA="${{ needs.resolve.outputs.sha }}"
+            echo "Deploying commit: $DEPLOY_SHA"
             git fetch --all --tags
-            git reset --hard "$REF"
+            git reset --hard "$DEPLOY_SHA"
             echo "Now at: $(git log -1 --oneline)"
             ./deploy.sh
