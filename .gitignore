@@ -17,10 +17,17 @@ web/dist/
 .env.development
 .env.docker
 .env.migration
+.env.smoke
+release.env
+/releases/
+/incoming/
+/data/
 .env.*.local
 !.env.example
 !.env.docker.example
 !.env.migration.example
+!.env.release.example
+!.env.smoke.example
 
 # Downloaded public database CA bundles (mounted read-only, never image layers).
 certs/*.pem

@@ -3,8 +3,9 @@
 Reads `migrations/*.sql` (sorted by filename), applies each file not yet
 recorded in the `_migrations` tracking table, and records the file's sha256
 so re-runs are no-ops and edits to already-applied files surface as drift
-errors instead of silent skips. Each file runs inside a single transaction
-so a failure aborts cleanly with no partial state.
+errors instead of silent skips. The pending batch runs in one transaction;
+a failed file rolls back that batch. Successful earlier invocations remain
+committed even if an application deployment later fails.
 
 Invoked automatically by `./deploy.sh` before the classport container starts,
 and runnable ad-hoc via:
@@ -32,6 +33,7 @@ from app.db_config import get_migration_dsn  # noqa: E402
 
 
 MIGRATIONS_DIR = REPO_ROOT / "migrations"
+MIGRATION_LOCK_ID = 728194035
 
 
 def wait_for_postgres(dsn: str, timeout_s: int = 60) -> None:
@@ -199,20 +201,26 @@ def main() -> int:
         f"{target.get('port', '5432')}/{target.get('dbname', '')}..."
     )
     wait_for_postgres(dsn)
-    with psycopg.connect(dsn, autocommit=False) as conn:
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        # Session-level lock spans table initialization and the pending batch.
+        # A competing release must not read a stale list of pending files.
+        locked = conn.execute("SELECT pg_try_advisory_lock(%s)", (MIGRATION_LOCK_ID,)).fetchone()[0]
+        if not locked:
+            print("migrations: another migration runner holds the database lock", file=sys.stderr)
+            return 1
         ensure_migrations_table(conn)
-        pending = list_pending(conn)
-        if not pending:
-            print("migrations: nothing to apply (database is up to date)")
-            return 0
-        print(f"migrations: {len(pending)} pending file(s)")
-        for f in pending:
-            try:
-                apply(conn, f)
-            except Exception as e:
-                print(f"  FAILED on {f.name}: {e}", file=sys.stderr)
-                conn.rollback()
-                return 1
+        try:
+            with conn.transaction():
+                pending = list_pending(conn)
+                if not pending:
+                    print("migrations: nothing to apply (database is up to date)")
+                    return 0
+                print(f"migrations: {len(pending)} pending file(s)")
+                for f in pending:
+                    apply(conn, f)
+        except Exception as e:
+            print(f"migrations: FAILED: {e}", file=sys.stderr)
+            return 1
         print(f"migrations: applied {len(pending)} file(s) successfully")
     return 0
 

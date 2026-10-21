@@ -125,6 +125,10 @@ then removes the old bootstrap credentials from its environment.
 
 ## RDS / external PostgreSQL
 
+For the CI-built EC2 release path, see [PRODUCTION.md](PRODUCTION.md). Its
+standalone Compose file starts no local PostgreSQL and runs maintenance from the
+same pinned backend image as the application.
+
 Have the database administrator provision a database and separate migration and
 runtime roles. The migration role needs permission to apply the schema and
 install the `citext` extension. Runtime table grants and default privileges must

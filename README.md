@@ -105,6 +105,10 @@ pool settings and verified TLS connections to RDS.
 
 For RDS / external PostgreSQL, use `./deploy.sh --external-db` on every deploy to skip local Postgres.
 
+For EC2 with RDS and CI-built immutable images, use the separate
+[production release workflow](docs/PRODUCTION.md). It keeps local deployment
+independent and restores the frontend/backend image pair together on failure.
+
 The backend is now live at `http://127.0.0.1:8000`. Verify:
 
 ```bash

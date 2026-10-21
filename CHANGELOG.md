@@ -6,6 +6,16 @@ versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### 2026-10-21
+
+#### Added
+
+- **Reproducible production releases.** Build and smoke-test backend and
+  frontend images in CI, deploy their immutable digests with a dedicated
+  production Compose configuration, and retain persistent course storage.
+  Serialize migrations, verify readiness plus login/REST/MCP access, and record
+  paired releases for automatic recovery and manual rollback.
+
 ### 2026-10-20
 
 #### Added

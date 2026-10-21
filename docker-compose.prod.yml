@@ -1,0 +1,80 @@
+# EC2 runtime. RDS is configured in .env and .env.migration.
+# Deploy with deploy-prod.sh so the image pair and rollback state stay together.
+name: classport-prod
+
+services:
+  classport:
+    image: ${BACKEND_IMAGE:?Set the backend image digest in release.env}
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        format: raw
+    environment:
+      STUDY_ROOT: /opt/courses
+    volumes:
+      - type: bind
+        source: ./data/courses
+        target: /opt/courses
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./certs
+        target: /etc/classport/certs
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "3", "http://localhost:8000/api/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks: [internal]
+
+  frontend:
+    image: ${FRONTEND_IMAGE:?Set the frontend image digest in release.env}
+    restart: unless-stopped
+    depends_on:
+      classport:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:80"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/login"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks: [internal]
+
+  migrate:
+    profiles: [maintenance]
+    image: ${BACKEND_IMAGE:?Set the backend image digest in release.env}
+    restart: "no"
+    command: ["uv", "run", "--no-sync", "python", "scripts/run_migrations.py"]
+    env_file:
+      - path: .env.migration
+        format: raw
+        required: false
+    volumes:
+      - type: bind
+        source: ./certs
+        target: /etc/classport/certs
+        read_only: true
+        bind:
+          create_host_path: false
+    networks: [internal]
+
+  smoke:
+    profiles: [maintenance]
+    image: ${BACKEND_IMAGE:?Set the backend image digest in release.env}
+    restart: "no"
+    command: ["uv", "run", "--no-sync", "python", "scripts/smoke_release.py"]
+    env_file:
+      - path: .env.smoke
+        format: raw
+        required: false
+    networks: [internal]
+
+networks:
+  internal:
+    driver: bridge

@@ -1,5 +1,8 @@
 name: Deploy
 
+permissions:
+  contents: read
+
 on:
   push:
     tags:
@@ -41,25 +44,138 @@ jobs:
     with:
       ref: ${{ needs.resolve.outputs.sha }}
 
-  deploy:
-    name: SSH deploy to Hetzner
+  images:
+    name: Build immutable release images
     needs: [resolve, checks]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      backend: ${{ steps.names.outputs.backend }}@${{ steps.backend.outputs.digest }}
+      frontend: ${{ steps.names.outputs.frontend }}@${{ steps.frontend.outputs.digest }}
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.2.0
+      - uses: actions/checkout@v4
         with:
-          host: ${{ secrets.HETZNER_HOST }}
-          username: ${{ secrets.HETZNER_USER }}
-          key: ${{ secrets.HETZNER_SSH_KEY }}
-          port: 22
-          command_timeout: 15m
-          script: |
-            set -euo pipefail
-            cd /opt/classport
-            DEPLOY_SHA="${{ needs.resolve.outputs.sha }}"
-            echo "Deploying commit: $DEPLOY_SHA"
-            git fetch --all --tags
-            git reset --hard "$DEPLOY_SHA"
-            echo "Now at: $(git log -1 --oneline)"
-            ./deploy.sh
+          ref: ${{ needs.resolve.outputs.sha }}
+      - name: Require the public production origin
+        env:
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
+        run: '[[ "$PUBLIC_SITE_URL" == https://?* ]]'
+      - name: Image names
+        id: names
+        run: |
+          echo "backend=ghcr.io/${GITHUB_REPOSITORY,,}-backend" >> "$GITHUB_OUTPUT"
+          echo "frontend=ghcr.io/${GITHUB_REPOSITORY,,}-frontend" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Backend image
+        id: backend
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.names.outputs.backend }}:${{ needs.resolve.outputs.sha }}
+          labels: org.opencontainers.image.revision=${{ needs.resolve.outputs.sha }}
+      - name: Frontend image
+        id: frontend
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: web/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.names.outputs.frontend }}:${{ needs.resolve.outputs.sha }}
+          labels: org.opencontainers.image.revision=${{ needs.resolve.outputs.sha }}
+          build-args: |
+            VITE_API_BASE_URL=
+            VITE_SITE_URL=${{ vars.PUBLIC_SITE_URL }}
+            VITE_SITE_NAME=${{ vars.PUBLIC_SITE_NAME || 'ClassPort' }}
+            VITE_SHOW_LANDING=${{ vars.PUBLIC_SHOW_LANDING || 'false' }}
+            VITE_GOOGLE_SITE_VERIFICATION=${{ vars.PUBLIC_GOOGLE_SITE_VERIFICATION }}
+
+  verify:
+    name: Verify the exact image pair and package release
+    needs: [resolve, images]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync --frozen
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Smoke test the published digests with a disposable database
+        env:
+          CLASSPORT_TEST_BACKEND_IMAGE: ${{ needs.images.outputs.backend }}
+          CLASSPORT_TEST_FRONTEND_IMAGE: ${{ needs.images.outputs.frontend }}
+        run: |
+          docker pull "$CLASSPORT_TEST_BACKEND_IMAGE"
+          docker pull "$CLASSPORT_TEST_FRONTEND_IMAGE"
+          uv run --no-sync pytest tests/test_release_images.py -q
+      - name: Package the verified release
+        env:
+          RELEASE_COMMIT: ${{ needs.resolve.outputs.sha }}
+          BACKEND_IMAGE: ${{ needs.images.outputs.backend }}
+          FRONTEND_IMAGE: ${{ needs.images.outputs.frontend }}
+        run: |
+          mkdir release
+          printf 'RELEASE_COMMIT=%s\nBACKEND_IMAGE=%s\nFRONTEND_IMAGE=%s\n' \
+            "$RELEASE_COMMIT" "$BACKEND_IMAGE" "$FRONTEND_IMAGE" > release/release.env
+          cp docker-compose.prod.yml deploy-prod.sh release/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-release
+          path: release/
+          if-no-files-found: error
+          retention-days: 90
+
+  deploy:
+    name: Deploy verified release to EC2
+    needs: [resolve, verify]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: production-release
+          path: release
+      - name: Transfer bundle and deploy
+        timeout-minutes: 15
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
+          RELEASE_ID: ${{ needs.resolve.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          : "${EC2_HOST:?}" "${EC2_USER:?}" "${EC2_SSH_KEY:?}" "${EC2_KNOWN_HOSTS:?}"
+          key="$RUNNER_TEMP/ec2-key"
+          hosts="$RUNNER_TEMP/ec2-known-hosts"
+          trap 'rm -f "$key" "$hosts"' EXIT
+          umask 077
+          printf '%s\n' "$EC2_SSH_KEY" > "$key"
+          printf '%s\n' "$EC2_KNOWN_HOSTS" > "$hosts"
+          options=(-i "$key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$hosts")
+          target="$EC2_USER@$EC2_HOST"
+          incoming="/opt/classport/incoming/$RELEASE_ID"
+          ssh "${options[@]}" "$target" "mkdir -p '$incoming'"
+          scp "${options[@]}" release/* "$target:$incoming/"
+          ssh "${options[@]}" "$target" "bash '$incoming/deploy-prod.sh' '$incoming'"

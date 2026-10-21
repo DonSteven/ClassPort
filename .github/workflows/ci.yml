@@ -42,7 +42,7 @@ jobs:
         run: |
           docker compose -f docker-compose.yml --env-file .env.docker --profile local-db --profile maintenance config -q
           docker compose -f docker-compose.yml --env-file .env.docker config -q
-          bash -n deploy.sh
+          bash -n deploy.sh deploy-prod.sh
       - name: Docker build smoke
         run: docker build -t classport:ci-smoke .
 

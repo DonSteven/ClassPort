@@ -24,6 +24,10 @@ web/.vite/
 .idea/
 docs/
 certs/
+releases/
+incoming/
+data/
+release.env
 
 # Env files never go into images — env comes from compose env_file.
 .env
