@@ -1,3 +1,5 @@
+import logging
+
 import pyotp
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -19,6 +21,7 @@ from ..ratelimit import check_login_rate, record_login_attempt, check_auth_rate
 from ..schemas import LoginRequest, SessionInfo, TotpSetupResponse, TotpVerifyRequest, SignupRequest, ForgotRequest, ResetRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+log = logging.getLogger(__name__)
 
 
 def _verify_totp_code(code: str, secret: str) -> bool:
@@ -39,7 +42,13 @@ async def login(body: LoginRequest, request: Request, response: Response) -> Ses
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid credentials")
 
     # TOTP check: per-user (totp service reads users.totp_*)
-    enabled, secret = await totp_svc.get_state(user.id)
+    try:
+        enabled, secret = await totp_svc.get_state(user.id)
+    except Exception as exc:
+        log.exception("Failed to read TOTP state during login for user %s", user.id)
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "authentication temporarily unavailable"
+        ) from exc
     if enabled and secret:
         if not body.totp_code:
             # Don't record as failed attempt — password was correct, user is

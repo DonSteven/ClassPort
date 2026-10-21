@@ -20,6 +20,12 @@ versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
   dedicated maintenance service, support external PostgreSQL through
   `--external-db`, and save the previous application images before rebuilding.
 
+#### Security
+
+- **TOTP login.** Return HTTP 503 without issuing a session when TOTP state
+  cannot be read, the user is missing, or enabled TOTP has no secret. Database
+  failures no longer silently disable the second factor.
+
 ### 2026-09-25
 
 #### Added

@@ -10,17 +10,16 @@ from .. import db
 
 
 async def get_state(user_id: UUID) -> tuple[bool, Optional[str]]:
-    """Return (totp_enabled, totp_secret) for the given user."""
-    try:
-        row = await db.fetchrow(
-            "SELECT totp_enabled, totp_secret FROM users WHERE id = %s LIMIT 1",
-            user_id,
-        )
-        if row:
-            return bool(row.get("totp_enabled")), row.get("totp_secret")
-    except Exception:
-        pass
-    return False, None
+    """Return the user's TOTP state; raise if unavailable or inconsistent."""
+    row = await db.fetchrow(
+        "SELECT totp_enabled, totp_secret FROM users WHERE id = %s LIMIT 1",
+        user_id,
+    )
+    if row is None:
+        raise LookupError("User not found when reading TOTP state")
+    if row["totp_enabled"] and not row["totp_secret"]:
+        raise ValueError("Enabled TOTP requires a secret")
+    return bool(row["totp_enabled"]), row["totp_secret"]
 
 
 async def set_pending(user_id: UUID, secret: str) -> None:

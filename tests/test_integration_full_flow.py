@@ -13,6 +13,7 @@ import base64
 import hashlib
 import secrets
 
+import psycopg
 import pyotp
 import pytest
 import pytest_asyncio
@@ -268,3 +269,45 @@ async def test_login_with_email_and_password(https_client, db_conn):
     })
     assert resp.status_code == 200, resp.text
     assert https_client.cookies.get("study_session")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "totp_result",
+    [
+        pytest.param(psycopg.OperationalError("TOTP lookup failed"), id="database_error"),
+        pytest.param(None, id="missing_user"),
+        pytest.param(
+            {"totp_enabled": True, "totp_secret": None}, id="enabled_without_secret"
+        ),
+    ],
+)
+async def test_login_stops_when_totp_state_is_unavailable(
+    https_client, db_conn, monkeypatch, totp_result
+):
+    from app.auth import SENTINEL_USER_ID
+    from app.services import totp as totp_svc
+
+    await totp_svc.set_pending(SENTINEL_USER_ID, pyotp.random_base32())
+    await totp_svc.enable(SENTINEL_USER_ID)
+    fetchrow = db_module.fetchrow
+
+    async def unavailable_totp_state(sql, *args):
+        # Keep password verification and rate limiting on the real database.
+        if sql.startswith("SELECT totp_enabled, totp_secret"):
+            if isinstance(totp_result, Exception):
+                raise totp_result
+            return totp_result
+        return await fetchrow(sql, *args)
+
+    monkeypatch.setattr(db_module, "fetchrow", unavailable_totp_state)
+
+    resp = await https_client.post(
+        "/api/auth/login", json={"email": _OPERATOR_EMAIL, "password": _TEST_PASSWORD}
+    )
+
+    assert resp.status_code == 503, resp.text
+    assert resp.json()["detail"] == "authentication temporarily unavailable"
+    assert "study_session" not in resp.headers.get("set-cookie", "")
+    assert https_client.cookies.get("study_session") is None
+    assert await db_module.fetchval("SELECT count(*) FROM auth_attempts WHERE ok = true") == 0
