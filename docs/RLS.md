@@ -46,7 +46,7 @@ Credential separation does not automatically enable a complete non-bypass flow.
 ### 4. Verify post-switch
 
 ```bash
-curl https://your-domain.tld/api/health        # {"ok":true,...}
+curl -f --max-time 3 https://your-domain.tld/api/health/ready  # HTTP 200, {"ok":true,...}
 curl -H "Cookie: <session>" https://your-domain.tld/api/courses  # operator's courses only
 # Sign up a second user; verify that user's data is isolated from the first.
 ```

@@ -30,7 +30,10 @@ def test_deploy_runs_maintenance_separately_and_skips_local_db_when_external(tmp
     )
     docker.chmod(0o755)
     curl = binaries / "curl"
-    curl.write_text('#!/bin/sh\necho \'{"ok":true}\'\n')
+    curl.write_text(
+        '#!/bin/sh\nprintf "curl %s\\n" "$*" >> "$DB_DEPLOY_TEST_LOG"\n'
+        'echo \'{"ok":true}\'\n'
+    )
     curl.chmod(0o755)
     env = {k: v for k, v in os.environ.items() if not k.startswith("COMPOSE_")}
     env.update(PATH=f"{binaries}:{os.environ['PATH']}", DB_DEPLOY_TEST_LOG=str(commands))
@@ -40,6 +43,7 @@ def test_deploy_runs_maintenance_separately_and_skips_local_db_when_external(tmp
     )
     assert result.returncode == 0, result.stdout + result.stderr
     calls = commands.read_text().splitlines()
+    assert "curl -fsS --max-time 3 http://127.0.0.1:8000/api/health" in calls
     migrate = next(i for i, c in enumerate(calls) if c.endswith("run --rm --no-deps migrate"))
     seed = next(i for i, c in enumerate(calls) if "scripts/seed_operator_password.py" in c)
     start = next(i for i, c in enumerate(calls) if c.endswith("up -d classport"))

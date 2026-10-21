@@ -101,16 +101,25 @@ pool settings and verified TLS connections to RDS.
 ./deploy.sh
 ```
 
-`deploy.sh` validates compose, builds the classport image, runs migrations and operator initialization with maintenance credentials, starts the runtime backend and frontend, then polls `GET /api/health` for up to 60 s. If health doesn't go green it auto-rolls back to the previously deployed image.
+`deploy.sh` validates compose, builds the classport image, runs migrations and operator initialization with maintenance credentials, starts the runtime backend and frontend, then polls readiness at `GET /api/health` for up to 60 s. If readiness doesn't pass it auto-rolls back to the previously deployed image.
 
 For RDS / external PostgreSQL, use `./deploy.sh --external-db` on every deploy to skip local Postgres.
 
 The backend is now live at `http://127.0.0.1:8000`. Verify:
 
 ```bash
-curl http://127.0.0.1:8000/api/health
-# → {"ok":true,"version":"...","db":"ok","storage":"ok ..."}
+curl -f --max-time 3 http://127.0.0.1:8000/api/health/live
+# → {"ok":true,"version":"..."}
+curl -f --max-time 3 http://127.0.0.1:8000/api/health/ready
+# → {"ok":true,"version":"...","db":"ok","storage":"ok"}
 ```
+
+Liveness checks only that the application responds. Readiness checks a database
+round trip and whether `STUDY_ROOT` can be listed, with a shared 2 s timeout;
+failure or timeout returns HTTP 503. `/api/health` is the same readiness check,
+kept for deployment and rollback to older images. Docker health also reports
+readiness; becoming `unhealthy` does not itself restart the container or stop
+proxy traffic. See [health checks](INSTALL.md#health-checks) for details.
 
 **4. Use it.**
 

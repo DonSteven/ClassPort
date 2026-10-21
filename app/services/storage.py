@@ -4,7 +4,7 @@ Course materials live as plain files under `STUDY_ROOT/<user_id>/...`
 (STUDY_ROOT defaults to `/opt/courses`). All read/write/list/move/delete
 operations in the app funnel through this module.
 
-Every public function takes `user_id: UUID` as its first param; internally
+File operations take `user_id: UUID` as their first param; internally
 `_safe_resolve` prepends `<user_id>/` before resolving against STUDY_ROOT,
 so callers continue to pass user-facing relative paths like
 `"ASB/lecture1.pdf"`. Path traversal both above the user's prefix AND
@@ -14,9 +14,9 @@ above STUDY_ROOT is rejected.
 per entry, with `id=None` marking folders so the UI can distinguish them
 without a second stat.
 
-Every operation emits an `events` row so the Activity page shows
+Business operations emit an `events` row so the Activity page shows
 everything that touches the course tree (MCP tool calls, web uploads,
-periodic syncs).
+periodic syncs). Health probes only check directory access and emit no events.
 
 All public functions are `async def`. Filesystem I/O is offloaded via
 `asyncio.to_thread()` so we don't block the event loop on disk reads
@@ -43,6 +43,17 @@ log = logging.getLogger(__name__)
 
 def _root() -> Path:
     return Path(os.environ.get("STUDY_ROOT", "/opt/courses"))
+
+
+def _check_readable_sync() -> None:
+    # Read at most one entry; propagate missing-directory and permission errors.
+    with os.scandir(_root()) as entries:
+        next(entries, None)
+
+
+async def check_readable() -> None:
+    """Verify STUDY_ROOT can be listed without writing files or audit events."""
+    await asyncio.to_thread(_check_readable_sync)
 
 
 def _user_root(user_id: UUID) -> Path:

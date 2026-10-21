@@ -58,7 +58,8 @@ services:
       # Bind to localhost only; Caddy on the host reverse-proxies in.
       - "127.0.0.1:8000:8000"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/health"]
+      # Container health reports readiness. Keep this path for image rollbacks.
+      test: ["CMD", "curl", "-fsS", "--max-time", "3", "http://localhost:8000/api/health"]
       interval: 10s
       timeout: 5s
       retries: 6

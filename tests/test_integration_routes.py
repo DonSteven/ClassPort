@@ -4,7 +4,7 @@ bug introduced when migrating callers to async — a missed await would
 serialize as a coroutine repr and either 500 or fail a Pydantic shape
 check, which is exactly what these tests assert against.
 
-`/api/health` exercises `db.fetchval` + `storage_svc.list_files`.
+`/api/health` and `/api/health/ready` exercise `db.fetchval` + storage access.
 `/api/dashboard` exercises every list_* service through `dashboard.py`.
 """
 from __future__ import annotations
@@ -13,15 +13,16 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_health_returns_ok_with_db_and_storage(client, db_conn, tmp_path, monkeypatch):
+@pytest.mark.parametrize("path", ["/api/health", "/api/health/ready"])
+async def test_health_returns_ok_with_db_and_storage(client, db_conn, tmp_path, monkeypatch, path):
     """Health check must report db=ok and storage=ok with no `coroutine` reprs."""
     monkeypatch.setenv("STUDY_ROOT", str(tmp_path))
-    resp = await client.get("/api/health")
+    resp = await client.get(path)
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["ok"] is True, body
     assert body["db"] == "ok", body
-    assert body["storage"].startswith("ok "), body
+    assert body["storage"] == "ok", body
 
 
 @pytest.mark.asyncio

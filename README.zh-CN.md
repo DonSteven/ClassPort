@@ -92,16 +92,20 @@ chmod 600 .env .env.migration .env.docker
 ./deploy.sh
 ```
 
-`deploy.sh` 验证 Compose 配置、构建 `classport` 镜像、使用维护凭证完成迁移和账户初始化、启动前后端，并轮询 `GET /api/health`，最多等待 60 秒。健康检查未通过时会自动回退到上一个镜像。
+`deploy.sh` 验证 Compose 配置、构建 `classport` 镜像、使用维护凭证完成迁移和账户初始化、启动前后端，并检查 `GET /api/health` 的就绪状态，最多等待 60 秒。就绪检查未通过时会自动回退到上一个镜像。
 
 使用 RDS 或外部 PostgreSQL 时，每次部署执行 `./deploy.sh --external-db`。
 
 后端现在运行于 `http://127.0.0.1:8000`，可这样验证：
 
 ```bash
-curl http://127.0.0.1:8000/api/health
-# → {"ok":true,"version":"...","db":"ok","storage":"ok ..."}
+curl -f --max-time 3 http://127.0.0.1:8000/api/health/live
+# → {"ok":true,"version":"..."}
+curl -f --max-time 3 http://127.0.0.1:8000/api/health/ready
+# → {"ok":true,"version":"...","db":"ok","storage":"ok"}
 ```
+
+存活检查只确认应用能够响应；就绪检查在总计 2 秒的超时内检查数据库，以及 `STUDY_ROOT` 是否可读。失败或超时返回 HTTP 503。`/api/health` 执行相同的就绪检查，并保留供旧镜像的部署和回退流程使用。Docker 也使用就绪状态；`unhealthy` 本身不会自动重启容器，也不会阻止代理转发流量。
 
 **4. 开始使用。**
 

@@ -18,7 +18,7 @@
 #   3. Build new backend and frontend images (unless --skip-build).
 #   4. Apply pending migrations against the live postgres (still running).
 #   5. Recreate the classport container with the new image.
-#   6. Poll http://127.0.0.1:8000/api/health for up to 60s.
+#   6. Poll readiness at http://127.0.0.1:8000/api/health for up to 60s.
 #   7. PASS → prune dangling images, log success.
 #      FAIL → re-tag :previous as :latest, recreate container, wait for old health.
 #
@@ -33,6 +33,7 @@ cd "$(dirname "$0")"
 COMPOSE="docker compose --env-file .env.docker"
 
 LOG="$PWD/classport-deploy.log"
+# Readiness uses the existing URL so the same gate also works on older images.
 HEALTH_URL=http://127.0.0.1:8000/api/health
 HEALTH_TIMEOUT=60   # seconds
 HEALTH_INTERVAL=2   # seconds
@@ -78,12 +79,12 @@ poll_health() {
         local body
         body=$(curl -fsS --max-time 3 "$HEALTH_URL" 2>/dev/null) || body=""
         if [ -n "$body" ] && echo "$body" | grep -q '"ok"[[:space:]]*:[[:space:]]*true'; then
-            log "health: PASS — $body"
+            log "readiness: PASS — $body"
             return 0
         fi
         sleep "$HEALTH_INTERVAL"
     done
-    err "health: FAIL — $HEALTH_URL did not return ok=true within ${HEALTH_TIMEOUT}s"
+    err "readiness: FAIL — $HEALTH_URL did not return ok=true within ${HEALTH_TIMEOUT}s"
     $COMPOSE logs --tail=40 classport | tee -a "$LOG"
     return 1
 }
@@ -97,7 +98,7 @@ if [ "$SHOW_STATUS" -eq 1 ]; then
     echo "=== image tags ==="
     docker images classport --format 'table {{.Repository}}:{{.Tag}}\t{{.ID}}\t{{.CreatedSince}}\t{{.Size}}'
     echo
-    echo "=== current classport health ==="
+    echo "=== current classport readiness ==="
     container_health
     echo
     echo "=== last 20 lines of $LOG ==="

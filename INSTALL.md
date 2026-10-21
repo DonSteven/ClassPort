@@ -143,7 +143,8 @@ described in [database setup](docs/DATABASE.md#rds--external-postgresql), then u
 6. Runs file-layout initialization and operator initialization. The operator seed
    uses the maintenance service and migration identity.
 7. Starts the runtime-only backend and recreates the frontend container.
-8. Polls `GET http://127.0.0.1:8000/api/health` for up to 60 s.
+8. Polls readiness at `GET http://127.0.0.1:8000/api/health` for up to 60 s,
+   with a 3 s timeout per request and an `ok=true` response-body check.
 9. **Pass:** prunes dangling images, exits 0.
    **Fail:** re-tags `:previous` as `:latest`, recreates the container, waits
    for the previous build's health to come back, exits non-zero.
@@ -151,12 +152,39 @@ described in [database setup](docs/DATABASE.md#rds--external-postgresql), then u
 Verify:
 
 ```bash
-curl http://127.0.0.1:8000/api/health
-# → {"ok":true,"version":"...","db":"ok","storage":"ok ..."}
+curl -f --max-time 3 http://127.0.0.1:8000/api/health/live
+# → {"ok":true,"version":"..."}
+curl -f --max-time 3 http://127.0.0.1:8000/api/health/ready
+# → {"ok":true,"version":"...","db":"ok","storage":"ok"}
 ```
 
 You should also see the running containers (`classport`, `classport-postgres`,
 `classport-frontend`) when you run `./deploy.sh --status`.
+
+### Health checks
+
+- `GET /api/health/live` returns HTTP 200 if the application can respond. It
+  does not access the database or storage.
+- `GET /api/health/ready` checks `SELECT 1` through the runtime connection pool,
+  then verifies that `STUDY_ROOT` is a readable directory. It returns HTTP 200
+  with `ok=true` on success, or HTTP 503 with `ok=false` on failure or timeout.
+  One 2 s budget covers connection acquisition, the query, and the storage probe.
+  Probes do not create files or write activity events. They do not validate
+  schema versions, all tenant directories, or storage writability.
+- `GET /api/health` runs the same readiness check. The deploy script and Docker
+  keep using this URL so rollback checks also work with older images. The deploy
+  script also checks `ok=true` because older images may return HTTP 200 on failure.
+
+When the database is unavailable, liveness can still succeed while readiness
+returns 503. Readiness recovers on subsequent checks when dependencies recover;
+it does not require an application restart. Before HTTP startup completes, a
+connection failure or request timeout also counts as a failed probe.
+
+Docker's single healthcheck reports readiness, with a 3 s request timeout and a
+5 s outer timeout. `restart: unless-stopped` applies when the container stops;
+marking a running container `unhealthy` does not itself restart it. The bundled
+Caddy proxy does not use readiness to stop forwarding traffic. Configure the
+proxy or load balancer separately if traffic must be withheld while not ready.
 
 ### First-time operator login
 
@@ -363,7 +391,7 @@ docker compose --env-file .env.docker pull   # postgres
 Run `docker compose --env-file .env.docker config` to see the error. Most
 common cause: `.env.docker` missing a key, or compose version below 2.30.
 
-**`/api/health` returns `{"ok": false, "db": "error: ..."}`.**
+**`/api/health/ready` returns HTTP 503 with `{"ok": false, "db": "error: ..."}`.**
 The FastAPI container can't reach Postgres. Check `docker logs classport-postgres`
 for boot errors; verify `DATABASE_URL` in `.env` uses the provisioned runtime
 role and that `.env.migration` uses the migration role. Bootstrap values in
@@ -371,7 +399,7 @@ role and that `.env.migration` uses the migration role. Bootstrap values in
 `/opt/postgres-data/` (the directory persists between runs — if you
 changed the password after first boot, Postgres is still using the old one).
 
-**`/api/health` returns `{"ok": false, "storage": "error: ..."}`.**
+**`/api/health/ready` returns HTTP 503 with `{"ok": false, "storage": "error: ..."}`.**
 The bind-mount for `/opt/courses` failed. Check the path exists on the host
 and is readable by the container. `docker exec classport ls /opt/courses`
 should show your course tree.

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import tomllib
 from contextlib import asynccontextmanager
@@ -24,6 +25,7 @@ def _read_version() -> str:
 
 
 APP_VERSION = _read_version()
+READINESS_TIMEOUT_SECONDS = 2
 
 # httpx logs every outbound request URL at INFO ("HTTP Request: POST <url>"),
 # which leaked the Telegram bot token and n8n webhook path into docker logs
@@ -104,33 +106,32 @@ def create_app() -> FastAPI:
         set_current_user_id(None)
         return await call_next(request)
 
-    # Health — checked by deploy.sh during rollouts. `ok` is true ONLY if
-    # every dependency is reachable (db, storage). Returns 200 either way so
-    # the caller can read the body for diagnostics.
+    @app.get("/api/health/live")
+    async def live() -> JSONResponse:
+        return JSONResponse({"ok": True, "version": APP_VERSION})
+
+    # Keep /api/health for deploy.sh, including checks after an image rollback.
     @app.get("/api/health")
-    async def health() -> JSONResponse:
+    @app.get("/api/health/ready")
+    async def ready() -> JSONResponse:
         from .services import storage as storage_svc
 
-        out: dict = {"ok": True, "version": APP_VERSION}
-        # DB check: trivial round-trip through the async pool. Uses
-        # `SELECT 1` rather than a real table read so it stays cheap and
-        # doesn't depend on any specific schema state.
+        out: dict = {"ok": False, "version": APP_VERSION}
+        dependency = "db"
         try:
-            await db_module.fetchval("SELECT 1")
-            out["db"] = "ok"
+            # One budget covers pool acquisition, the query, and storage I/O.
+            async with asyncio.timeout(READINESS_TIMEOUT_SECONDS):
+                await db_module.fetchval("SELECT 1")
+                out["db"] = "ok"
+                dependency = "storage"
+                await storage_svc.check_readable()
+                out["storage"] = "ok"
+                out["ok"] = True
+        except TimeoutError:
+            out[dependency] = "error: readiness check timed out"
         except Exception as exc:
-            out["db"] = f"error: {exc!s}"[:200]
-            out["ok"] = False
-        # Storage check: STUDY_ROOT must exist and the operator's user dir
-        # must be readable. Uses the sentinel since /api/health is unauthed.
-        try:
-            from .auth import SENTINEL_USER_ID
-            entries = await storage_svc.list_files(SENTINEL_USER_ID, "", limit=1)
-            out["storage"] = f"ok ({len(entries)} entries seen)"
-        except Exception as exc:
-            out["storage"] = f"error: {exc!s}"[:200]
-            out["ok"] = False
-        return JSONResponse(out)
+            out[dependency] = f"error: {exc!s}"[:200]
+        return JSONResponse(out, status_code=200 if out["ok"] else 503)
 
     # Mount routers under /api
     for r in [

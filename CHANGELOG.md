@@ -8,6 +8,13 @@ versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### 2026-10-20
 
+#### Added
+
+- **Health probes.** Add `/api/health/live` for process liveness and
+  `/api/health/ready` for database and storage readiness. Readiness returns HTTP
+  503 on dependency failure within a shared two-second budget; `/api/health`
+  remains a readiness alias. Storage probes no longer create activity events.
+
 #### Changed
 
 - **Deployment gates.** Run backend tests, lint, a Docker build, Compose
