@@ -1,16 +1,9 @@
-"""File-storage intents — single entry point for both REST and MCP callers.
-
-Per-user pass-through: every storage call forwards user_id to the service
-so paths resolve under `STUDY_ROOT/<user_id>/...`. Search filters file_index
-rows by user_id. `index_all` is operator-scoped (walks every user's tree);
-the user_id arg is preserved here for signature consistency with the rest
-of the intent layer but is ignored inside.
-"""
+"""File operations shared by authenticated REST and MCP callers."""
 from typing import Any
 from uuid import UUID
 
 from ..services import file_index as file_index_svc
-from ..services import storage as svc
+from ..services import file_records as svc
 
 
 async def list_files(
@@ -39,7 +32,7 @@ async def upload(
     user_id: UUID,
     path: str,
     data: bytes,
-    content_type: str = "application/octet-stream",
+    content_type: str | None = None,
 ) -> dict[str, Any]:
     return await svc.upload(user_id, path, data, content_type)
 
@@ -53,7 +46,7 @@ async def signed_url(user_id: UUID, path: str, expires_in: int = 3600) -> str:
 
 
 async def signed_upload_url(user_id: UUID, path: str) -> dict[str, Any]:
-    return await svc.signed_upload_url(user_id, path)
+    return await svc.begin_upload(user_id, path)
 
 
 async def move(user_id: UUID, source: str, destination: str) -> dict[str, Any]:
@@ -65,8 +58,25 @@ async def search(user_id: UUID, q: str, limit: int = 20) -> list[dict[str, Any]]
 
 
 async def index_all(user_id: UUID) -> dict[str, Any]:
-    # Operator-scoped: index_all walks every user's tree and derives the
-    # user_id from each top-level path component. The user_id arg here is
-    # preserved for intent-layer consistency but deliberately ignored.
-    del user_id
-    return await file_index_svc.index_all()
+    return await file_index_svc.index_all(user_id)
+
+
+async def create_folder(user_id: UUID, path: str) -> dict:
+    return await svc.create_folder(user_id, path)
+
+
+async def accept_upload(user_id: UUID, file_id: UUID, version_id: UUID,
+                        data: bytes, content_type: str | None = None) -> dict:
+    return await svc.accept_upload(user_id, file_id, version_id, data, content_type)
+
+
+async def current_version(user_id: UUID, path: str) -> dict:
+    return await svc.current_version(user_id, path)
+
+
+async def get_version(user_id: UUID, file_id: UUID, version_id: UUID) -> dict:
+    return await svc.get_version(user_id, file_id, version_id)
+
+
+async def read_version(user_id: UUID, file_id: UUID, version_id: UUID) -> bytes:
+    return await svc.read_version(user_id, file_id, version_id)

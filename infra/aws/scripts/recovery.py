@@ -27,7 +27,9 @@ STATE_SQL = """SELECT json_build_object(
  'migrations', (SELECT json_agg(m ORDER BY filename) FROM public._migrations m),
  'users', (SELECT count(*) FROM users), 'courses', (SELECT count(*) FROM courses),
  'tasks', (SELECT count(*) FROM tasks), 'file_index', (SELECT count(*) FROM file_index),
- 'references', (SELECT coalesce(json_agg(path ORDER BY path), '[]') FROM file_index))"""
+ 'files', (SELECT count(*) FROM files), 'file_versions', (SELECT count(*) FROM file_versions),
+ 'references', (SELECT coalesce(json_agg(object_key ORDER BY object_key), '[]')
+                FROM file_versions WHERE storage_backend = 'local' AND upload_status = 'completed'))"""
 
 
 def progress(stage):

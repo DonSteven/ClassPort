@@ -1,16 +1,4 @@
-"""Smoke test for app/intents/files.py — proves the pass-through compiles.
-
-Storage operations (list_files, upload, download, etc.) interact with
-STUDY_ROOT on disk and cannot run meaningfully against a test Postgres
-container. We test only that:
-
-1. The intent module imports without error.
-2. The file_index.search wrapper returns an empty list for a nonsense query
-   (the file_index table exists in the test schema; no files are indexed).
-
-Phase 2 will add proper storage-scoping tests once a per-user storage
-namespace is in place.
-"""
+"""File intent exports and user-scoped search smoke checks."""
 import pytest
 from uuid import UUID
 

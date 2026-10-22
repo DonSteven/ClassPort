@@ -8,7 +8,8 @@ from httpx import ASGITransport, AsyncClient
 
 from app import db
 from app.config import get_settings
-from app.services import storage
+from app.storage import local as storage
+from app.services import events as events_svc
 
 
 @pytest_asyncio.fixture
@@ -30,7 +31,7 @@ async def test_live_does_not_access_dependencies(health_client, monkeypatch):
     query = AsyncMock(side_effect=AssertionError("liveness must not query the database"))
     probe = AsyncMock(side_effect=AssertionError("liveness must not access storage"))
     monkeypatch.setattr(db, "fetchval", query)
-    monkeypatch.setattr(storage, "check_readable", probe)
+    monkeypatch.setattr(storage.LocalStorage, "check_readable", probe)
 
     response = await health_client.get("/api/health/live")
 
@@ -45,7 +46,7 @@ async def test_ready_checks_dependencies_without_writing_events(health_client, m
     query = AsyncMock(return_value=1)
     record = AsyncMock()
     monkeypatch.setattr(db, "fetchval", query)
-    monkeypatch.setattr(storage.events_svc, "record_event", record)
+    monkeypatch.setattr(events_svc, "record_event", record)
 
     response = await health_client.get(path)
 
@@ -120,7 +121,7 @@ async def test_ready_times_out_and_cancels_probe(health_client, monkeypatch, dep
     if dependency == "db":
         monkeypatch.setattr(db, "fetchval", blocked)
     else:
-        monkeypatch.setattr(storage, "check_readable", blocked)
+        monkeypatch.setattr(storage.LocalStorage, "check_readable", blocked)
 
     async with asyncio.timeout(1):
         response = await health_client.get("/api/health/ready")

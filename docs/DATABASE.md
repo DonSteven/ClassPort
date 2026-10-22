@@ -213,10 +213,11 @@ together. Existing index writes and search remain supported; a referenced index
 is unique per user and file. Files may have no current version during the first
 upload, and directories have none.
 
-This is the data foundation only. The current file APIs and indexer do not yet
-populate these records. B2 must import and verify existing files, including their
-content against any old index, before a second migration makes index references
-mandatory. Deliver that second migration after the import: the migration runner
+B2 file APIs and indexing now populate these records. Existing installations
+must import and verify legacy content and index references before cutover; see
+[local file storage](FILE_STORAGE.md). A second migration makes index references
+mandatory only after that verification. Deliver that second migration after the
+import: the migration runner
 applies all pending SQL files in one batch and does not pause for backfills.
-Version bytes become immutable through the B2 storage implementation; persistent
+Version bytes are immutable through the B2 storage implementation; persistent
 execution, retry and outbox dispatch are connected in B4/B5.

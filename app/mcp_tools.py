@@ -197,7 +197,7 @@ def register_tools(server: FastMCP) -> None:
 
         `color_hex` (e.g. '#7ab8ff') is the accent stripe shown in the UI;
         pick something visually distinct from existing courses. `folder_name`
-        is the folder under `/opt/courses/` where the course's PDFs / notes live —
+        is the logical folder where the course's PDFs / notes appear —
         match it to whatever folder the user keeps locally if they sync
         files.
 
@@ -985,11 +985,11 @@ def register_tools(server: FastMCP) -> None:
         now = datetime.now(tz=tz)
         return {"iso": now.isoformat(), "utc_iso": now.astimezone(timezone.utc).isoformat()}
 
-    # ─────────────────────── Course files (filesystem under /opt/courses) ─────────
+    # ─────────────────────── Course files ─────────
 
     @server.tool()
     async def list_course_files(prefix: str = "", limit: int = 200) -> list[dict]:
-        """Browse the course tree on disk — the user's course PDFs, notes,
+        """Browse the user's course files — the user's course PDFs, notes,
         slides, etc. Structure typically mirrors a local per-course folder
         layout.
 
@@ -1005,32 +1005,11 @@ def register_tools(server: FastMCP) -> None:
 
         To read a file's contents, pass its `path` to `read_course_file`."""
         clean = (prefix or "").strip().strip("/")
-        entries = await files_intent.list_files(_get_mcp_user_id(), clean, limit=limit)
-        out: list[dict] = []
-        for e in entries:
-            name = e.get("name") or ""
-            if not name:
-                continue
-            path = f"{clean}/{name}" if clean else name
-            if e.get("id") is None:
-                out.append({"name": name, "path": path, "type": "folder"})
-            else:
-                meta = e.get("metadata") or {}
-                out.append(
-                    {
-                        "name": name,
-                        "path": path,
-                        "type": "file",
-                        "size": meta.get("size"),
-                        "content_type": meta.get("mimetype"),
-                        "updated_at": e.get("updated_at"),
-                    }
-                )
-        return out
+        return await files_intent.list_files(_get_mcp_user_id(), clean, limit=limit)
 
     @server.tool()
     async def read_course_file(path: str, pages: str = "1-20") -> list:
-        """Read a file from the course tree on disk. Auto-detects by extension:
+        """Read the current version of a course file. Auto-detects by extension:
           - .md / .txt → plain text
           - .ipynb     → parsed notebook (cells inline as text)
           - .pdf       → requested page range rendered as PNG images (multimodal)

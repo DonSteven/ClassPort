@@ -513,6 +513,8 @@ export function useDeleteLecture() {
 
 // ── Files ───────────────────────────────────────────────────────────────────
 export type FileEntry = {
+  file_id: string;
+  version_id: string | null;
   name: string;
   path: string;
   type: "file" | "folder";
@@ -611,7 +613,7 @@ export function useSyncMaterials() {
       );
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["files", "list"] });
+      qc.invalidateQueries({ queryKey: ["files"] });
     },
   });
 }
@@ -620,7 +622,9 @@ export function useUploadFile() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ file, path }: { file: File; path: string }) => {
-      const { url } = await api.post<{ url: string; token: string; path: string }>(
+      const { url, headers, file_id, version_id } = await api.post<{
+        url: string; headers: Record<string, string>; file_id: string; version_id: string;
+      }>(
         "/api/files/upload-url",
         { path }
       );
@@ -628,18 +632,17 @@ export function useUploadFile() {
         method: "PUT",
         headers: {
           "Content-Type": file.type || "application/octet-stream",
-          "x-upsert": "true",
+          ...headers,
         },
         body: file,
       });
       if (!res.ok) {
         throw new Error(`upload failed: ${res.status} ${res.statusText}`);
       }
-      return { path };
+      return { path, file_id, version_id };
     },
     onSuccess: () => {
-      // any list at any prefix should refresh
-      qc.invalidateQueries({ queryKey: ["files", "list"] });
+      qc.invalidateQueries({ queryKey: ["files"] });
     },
   });
 }
@@ -650,7 +653,7 @@ export function useDeleteEntry() {
     mutationFn: ({ path, kind }: { path: string; kind: "file" | "folder" }) =>
       api.del<{ deleted: string[] }>("/api/files", { path, kind }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["files", "list"] });
+      qc.invalidateQueries({ queryKey: ["files"] });
     },
   });
 }
@@ -661,7 +664,7 @@ export function useCreateFolder() {
     mutationFn: ({ path }: { path: string }) =>
       api.post<{ folder: string }>("/api/files/folder", { path }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["files", "list"] });
+      qc.invalidateQueries({ queryKey: ["files"] });
     },
   });
 }
@@ -679,7 +682,7 @@ export function useMoveEntry() {
       kind: "file" | "folder";
     }) => api.post<{ moved: { from: string; to: string }[] }>("/api/files/move", { from, to, kind }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["files", "list"] });
+      qc.invalidateQueries({ queryKey: ["files"] });
     },
   });
 }

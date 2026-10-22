@@ -61,9 +61,7 @@ export function FileBrowser({
   const search = useFileSearch(searchQuery);
 
   const { data, isPending, error } = useFilesList(prefix);
-  // Hide the .keep placeholder we drop into empty folders so they survive
-  // the filesystem's flat-file model (no true directory entries until a file exists).
-  const visible = (data ?? []).filter((e) => e.name !== ".keep");
+  const visible = data ?? [];
 
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);

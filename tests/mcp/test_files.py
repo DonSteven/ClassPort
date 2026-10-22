@@ -1,32 +1,17 @@
-"""MCP tool tests — course files + notify_telegram.
-
-Coverage: list_course_files, read_course_file, notify_telegram.
-
-`list_course_files` and `read_course_file` are filesystem-backed via
-`app.services.storage` — point `STUDY_ROOT` at a per-test `tmp_path` and
-write fixtures to disk directly. `notify_telegram` is async and HTTP-backed,
-so we monkeypatch `httpx.post` for the success path and mock `get_secrets`
-for the user_secrets path.
-
-Note: as of v0.7.0 the tool reads creds exclusively from user_secrets —
-no env fallback (operator credentials must not leak across tenants).
-"""
+"""MCP course-file reads use versioned records; Telegram tests use mocked HTTP."""
 import pytest
+
+from app.auth import SENTINEL_USER_ID
+from app.services import file_records as files
 
 from tests.mcp._harness import get_tool_fn
 
 
 @pytest.fixture
 def study_root(tmp_path, monkeypatch):
-    """Point STUDY_ROOT at a per-test directory and pre-create the sentinel
-    user's subdir. After Phase 2, storage operations resolve under
-    `STUDY_ROOT/<user_id>/`; the MCP tools pass SENTINEL_USER_ID, so the
-    files must land in that subdir for the tools to see them."""
-    from app.auth import SENTINEL_USER_ID
+    """Give version objects a temporary root."""
     monkeypatch.setenv("STUDY_ROOT", str(tmp_path))
-    user_dir = tmp_path / str(SENTINEL_USER_ID)
-    user_dir.mkdir(parents=True, exist_ok=True)
-    return user_dir
+    return tmp_path
 
 
 # ── list_course_files ────────────────────────────────────────────────────────
@@ -42,12 +27,10 @@ async def test_list_course_files_empty(client, db_conn, mcp_server, study_root):
 
 @pytest.mark.asyncio
 async def test_list_course_files_after_upload(client, db_conn, mcp_server, study_root):
-    """A file dropped on disk shows up in the listing with type='file' and matching path."""
+    """An uploaded version shows up in the listing with type='file' and matching path."""
     list_course_files = get_tool_fn(mcp_server, "list_course_files")
 
-    course_dir = study_root / "MCPF1"
-    course_dir.mkdir()
-    (course_dir / "notes.md").write_text("# notes", encoding="utf-8")
+    await files.upload(SENTINEL_USER_ID, "MCPF1/notes.md", b"# notes")
 
     result = await list_course_files(prefix="MCPF1")
     assert len(result) == 1
@@ -65,11 +48,8 @@ async def test_read_text_file(client, db_conn, mcp_server, study_root):
     """Reading a `.md` file returns its decoded text as the only list item."""
     read_course_file = get_tool_fn(mcp_server, "read_course_file")
 
-    course_dir = study_root / "MCPF1"
-    course_dir.mkdir()
     body = "# Notes\nhello world\n"
-    # write_bytes (not write_text) to avoid Windows CRLF translation.
-    (course_dir / "notes.md").write_bytes(body.encode("utf-8"))
+    await files.upload(SENTINEL_USER_ID, "MCPF1/notes.md", body.encode("utf-8"))
 
     result = await read_course_file(path="MCPF1/notes.md")
     assert result == [body]
@@ -102,14 +82,12 @@ async def test_read_pdf_with_page_range(client, db_conn, mcp_server, study_root)
 
     read_course_file = get_tool_fn(mcp_server, "read_course_file")
 
-    course_dir = study_root / "MCPF1"
-    course_dir.mkdir()
     doc = fitz.open()
     page = doc.new_page()
     page.insert_text((72, 72), "hello pdf")
     pdf_bytes = doc.tobytes()
     doc.close()
-    (course_dir / "slides.pdf").write_bytes(pdf_bytes)
+    await files.upload(SENTINEL_USER_ID, "MCPF1/slides.pdf", pdf_bytes)
 
     result = await read_course_file(path="MCPF1/slides.pdf", pages="1")
     assert isinstance(result, list)

@@ -1,5 +1,6 @@
 """Restore a real PostgreSQL export into another instance and read recovered data."""
 import importlib.util
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -63,6 +64,23 @@ async def test_real_export_restores_login_business_data_pdf_and_mcp(tmp_path, mo
             pdf.new_page().insert_text((72, 72), "Recovery drill PDF")
             pdf.save(folder / "sample.pdf")
         original_bytes = (folder / "sample.pdf").read_bytes()
+        with psycopg.connect(source_url) as conn:
+            conn.execute("UPDATE file_index SET size=%s, sha256=%s", (
+                len(original_bytes), hashlib.sha256(original_bytes).hexdigest()))
+        from app import db
+        from scripts.import_local_files import import_user
+        monkeypatch.setenv("STUDY_ROOT", str(materials))
+        monkeypatch.setattr(db, "_pool", None)
+        await db.init_pool(dsn(source, "classport_app", config["APP_DB_PASSWORD"]))
+        try:
+            imported = await import_user(bootstrap.OPERATOR_ID, materials / bootstrap.OPERATOR_ID)
+            assert imported["errors"] == []
+        finally:
+            await db.close_pool()
+        with psycopg.connect(source_url) as conn:
+            original_state = conn.execute(recovery.STATE_SQL).fetchone()[0]
+        assert original_state["file_versions"] == 1
+        assert original_state["references"][0].startswith("objects/")
         files = recovery.check_files(materials, original_state)
         with tarfile.open(tmp_path / "courses.tar.gz", "w:gz") as archive:
             archive.add(materials, arcname=".")
@@ -71,7 +89,7 @@ async def test_real_export_restores_login_business_data_pdf_and_mcp(tmp_path, mo
             environment={"PGPASSWORD": config["MIGRATION_DB_PASSWORD"]})
         assert exported.exit_code == 0, exported.output.decode(errors="replace")
         # Reproduce changes/loss after the backup; restoration must recover the old data.
-        (folder / "sample.pdf").unlink()
+        (materials / original_state["references"][0]).unlink()
         with psycopg.connect(source_url) as conn:
             conn.execute("UPDATE courses SET full_name='Changed after backup' WHERE code='DRILL'")
         bootstrap.provision_roles(dsn(target), config)

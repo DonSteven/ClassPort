@@ -90,6 +90,23 @@ def create_app() -> FastAPI:
         lifespan=_lifespan,
     )
 
+    from .services.file_records import InvalidFilePath
+    from .storage.base import StorageConflict, StorageNotFound, StorageUnavailable
+
+    async def file_error(request, exc):
+        if isinstance(exc, StorageNotFound):
+            status, detail = 404, "file or content not found"
+        elif isinstance(exc, StorageConflict):
+            status, detail = 409, str(exc)
+        elif isinstance(exc, InvalidFilePath):
+            status, detail = 400, "invalid file path"
+        else:
+            status, detail = 503, "file storage is unavailable"
+        return JSONResponse({"detail": detail}, status_code=status)
+
+    for error in (StorageNotFound, StorageConflict, StorageUnavailable, InvalidFilePath):
+        app.add_exception_handler(error, file_error)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins_list,
@@ -106,7 +123,7 @@ def create_app() -> FastAPI:
     @app.get("/api/health")
     @app.get("/api/health/ready")
     async def ready() -> JSONResponse:
-        from .services import storage as storage_svc
+        from .storage import get_storage
 
         out: dict = {"ok": False, "version": APP_VERSION}
         dependency = "db"
@@ -118,7 +135,7 @@ def create_app() -> FastAPI:
                 out["db"] = "ok"
                 dependency = "storage"
                 with operation("readiness.storage"):
-                    await storage_svc.check_readable()
+                    await get_storage().check_readable()
                 out["storage"] = "ok"
                 out["ok"] = True
         except TimeoutError:

@@ -1,13 +1,9 @@
-"""Walk the course_files bucket and (re)index full-text content.
+"""Operator command to index completed database file versions.
 
-Run this once after creating the file_index table:
+Run with DATABASE_URL and STUDY_ROOT in the environment:
     uv run --no-sync python scripts/index_files.py
 
-Triggered automatically by /api/internal/index-files after each Material sync,
-which uses the in-process pool already initialised by the FastAPI lifespan.
-This standalone entrypoint manages its own pool lifecycle (init → run → close)
-so cron-style invocations work without depending on the API process.
-Idempotent — re-runs are cheap because rows are skipped when sha256 matches.
+Unchanged immutable versions are skipped. Legacy files must be imported first.
 """
 import asyncio
 import logging

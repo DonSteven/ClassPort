@@ -53,7 +53,7 @@ def trigger_sync(
     mode: str = "sync",
     x_internal_secret: str | None = Header(default=None, alias="X-Internal-Secret"),
 ):
-    """Queue a re-index of `STUDY_ROOT` for full-text search.
+    """Queue a re-index of completed file versions for full-text search.
 
     The `mode` query param is accepted (and echoed back) for compatibility
     with callers that historically distinguished sync directions, but the
@@ -70,7 +70,7 @@ def trigger_index(
     background: BackgroundTasks,
     x_internal_secret: str | None = Header(default=None, alias="X-Internal-Secret"),
 ):
-    """Queue a re-index of `STUDY_ROOT` for full-text search."""
+    """Queue a re-index of completed file versions for full-text search."""
     _check_secret(x_internal_secret)
     background.add_task(_reindex)
     return {"ok": True, "queued": "reindex"}

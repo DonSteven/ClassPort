@@ -25,6 +25,16 @@ versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
 - **File and job schema.** Introduce user-scoped file records, immutable
   revisions, processing jobs, attempt history and a transactional outbox, with
   ownership constraints and uniqueness rules for paths and processing requests.
+- **Versioned local storage.** Route uploads, downloads, previews, MCP reads
+  and indexing through file metadata while storing immutable revision objects.
+  Add a repeatable importer for existing local files and verify historical
+  completed versions during restore checks.
+
+#### Changed
+
+- **File operations.** Rename, move and soft-delete files or directories
+  through database metadata. Temporarily reject legacy material synchronization
+  until it can write versioned files.
 
 ### 2026-10-21
 

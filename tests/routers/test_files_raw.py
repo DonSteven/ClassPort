@@ -6,7 +6,6 @@ the file, so types the browser renders safely must be `inline`. Anything
 that could run script on our origin (HTML, SVG, …) must stay `attachment`,
 and `nosniff` stops the browser reinterpreting a file as HTML.
 """
-from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -24,8 +23,6 @@ async def raw_client(db_conn, tmp_path, monkeypatch):
 
     monkeypatch.setenv("STUDY_ROOT", str(tmp_path))
     get_settings.cache_clear()
-    user_dir: Path = tmp_path / str(SENTINEL_USER_ID)
-    (user_dir / "AML").mkdir(parents=True)
     files = {
         "AML/讲座 01 练习.pdf": b"%PDF-1.4\n%%EOF\n",
         "AML/diagram.png": b"\x89PNG\r\n\x1a\n",
@@ -34,10 +31,10 @@ async def raw_client(db_conn, tmp_path, monkeypatch):
         "AML/icon.svg": b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>",
         "AML/notes.zip": b"PK\x03\x04",
     }
-    for rel, body in files.items():
-        (user_dir / rel).write_bytes(body)
-
     monkeypatch.setattr(db_module, "_pool", db_conn)
+    from app.services.file_records import upload
+    for rel, body in files.items():
+        await upload(SENTINEL_USER_ID, rel, body)
     app = create_app()
     app.dependency_overrides[require_user] = lambda: _sentinel_user()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
