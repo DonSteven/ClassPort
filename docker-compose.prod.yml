@@ -1,5 +1,5 @@
-# EC2 runtime. RDS is configured in .env and .env.migration.
-# Deploy with deploy-prod.sh so the image pair and rollback state stay together.
+# EC2 runtime. Database maintenance runs once through classport-release.
+# Application containers receive runtime credentials only.
 name: classport-prod
 
 services:
@@ -44,24 +44,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 6
-    networks: [internal]
-
-  migrate:
-    profiles: [maintenance]
-    image: ${BACKEND_IMAGE:?Set the backend image digest in release.env}
-    restart: "no"
-    command: ["uv", "run", "--no-sync", "python", "scripts/run_migrations.py"]
-    env_file:
-      - path: .env.migration
-        format: raw
-        required: false
-    volumes:
-      - type: bind
-        source: ./certs
-        target: /etc/classport/certs
-        read_only: true
-        bind:
-          create_host_path: false
     networks: [internal]
 
   smoke:

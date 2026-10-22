@@ -28,7 +28,7 @@ def _bundle(path, number):
 def host(tmp_path):
     root = tmp_path / "host"
     root.mkdir()
-    for name in (".env", ".env.migration", ".env.smoke"):
+    for name in (".env", ".env.smoke"):
         (root / name).touch()
     (root / "certs").mkdir()
     (root / "certs/global-bundle.pem").touch()
@@ -49,12 +49,14 @@ def host(tmp_path):
         "with open(os.environ['TEST_COMMANDS'], 'a') as log:\n"
         "    log.write(json.dumps({'args': args, 'backend': image, "
         "'frontend': os.environ.get('FRONTEND_IMAGE')}) + '\\n')\n"
+        "if 'ps' in args: print(args[-1]); sys.exit(0)\n"
+        "if args[0] == 'inspect':\n"
+        "    if image.endswith('3' * 64) and os.environ.get('TEST_FAIL_STAGE') == 'images': print('wrong-image'); sys.exit(0)\n"
+        "    print(os.environ['FRONTEND_IMAGE' if args[-1] == 'frontend' else 'BACKEND_IMAGE']); sys.exit(0)\n"
         "stage = ''\n"
         "if 'pull' in args and 'run' not in args and 'up' not in args: stage = 'pull'\n"
         "elif 'up' in args: stage = 'up'\n"
         "elif 'smoke' in args: stage = 'smoke'\n"
-        "elif 'scripts/seed_operator_password.py' in args: stage = 'seed'\n"
-        "elif 'run' in args and 'migrate' in args: stage = 'migrate'\n"
         "if image.endswith('3' * 64) and stage == os.environ.get('TEST_FAIL_STAGE', '!'):\n"
         "    sys.exit(1)\n"
         "if image.endswith('1' * 64) and stage == 'up' and os.environ.get('TEST_FAIL_OLD'):\n"
@@ -91,7 +93,7 @@ def _run(host, *args, **settings):
     return result, [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []
 
 
-def test_production_deploy_records_a_verified_pair_and_orders_maintenance(host):
+def test_production_deploy_records_a_verified_pair_after_database_preparation(host):
     root, _, _ = host
     result, calls = _run(host)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -100,26 +102,32 @@ def test_production_deploy_records_a_verified_pair_and_orders_maintenance(host):
     assert (root / "releases/previous").resolve() == root / "releases/old"
     args = [call["args"] for call in calls]
     pull = next(i for i, a in enumerate(args) if "pull" in a and "run" not in a and "up" not in a)
-    migrate = next(i for i, a in enumerate(args) if a[-1] == "migrate")
-    seed = next(i for i, a in enumerate(args) if "scripts/seed_operator_password.py" in a)
     up = next(i for i, a in enumerate(args) if "up" in a)
     smoke = next(i for i, a in enumerate(args) if a[-1] == "smoke")
-    assert pull < migrate < seed < up < smoke
+    assert pull < up < smoke
+    assert not any("migrate" in a or "scripts/seed_operator_password.py" in a for a in args)
     assert "--no-build" in args[up]
     assert args[up][-2:] == ["classport", "frontend"]
     assert all("build" not in a and "postgres" not in a for a in args)
-    assert all("--project-directory" in a and "-f" in a for a in args)
+    assert all("--project-directory" in a and "-f" in a for a in args if a[0] == "compose")
+    report = json.loads((current / "application-result.json").read_text())
+    assert report["status"] == "succeeded"
+    assert all(value == "succeeded" for value in report["steps"].values())
+    assert report["current_release"]["backend"].endswith("3" * 64)
 
 
-@pytest.mark.parametrize("stage", ["pull", "migrate", "seed", "up", "ready", "smoke"])
+@pytest.mark.parametrize("stage", ["pull", "up", "ready", "smoke", "images"])
 def test_failed_release_preserves_success_records_and_restores_pair_after_switch(host, stage):
     root, _, _ = host
     result, calls = _run(host, TEST_FAIL_STAGE=stage)
     assert result.returncode == 1, result.stdout + result.stderr
     assert (root / "releases/current").resolve() == root / "releases/old"
     assert (root / "releases/previous").resolve() == root / "releases/older"
+    report = json.loads(next((root / "releases").glob("3*/application-result.json")).read_text())
+    assert report["status"] == "failed"
+    assert report["current_release"]["backend"].endswith("1" * 64)
     restores = [c for c in calls if "up" in c["args"] and c["backend"].endswith("1" * 64)]
-    assert bool(restores) == (stage in ("up", "ready", "smoke"))
+    assert bool(restores) == (stage in ("up", "ready", "smoke", "images"))
     if restores:
         assert restores[0]["frontend"].endswith("1" * 64)
         assert str(root / "releases/old/docker-compose.prod.yml") in restores[0]["args"]
@@ -128,7 +136,6 @@ def test_failed_release_preserves_success_records_and_restores_pair_after_switch
 
 def test_manual_rollback_uses_previous_pair_without_migrations(host):
     root, _, _ = host
-    (root / ".env.migration").unlink()
     result, calls = _run(host, "--rollback")
     assert result.returncode == 0, result.stdout + result.stderr
     assert (root / "releases/current").resolve() == root / "releases/older"

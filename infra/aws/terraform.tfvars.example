@@ -9,3 +9,9 @@ name        = "classport-prod"
 # Defaults: t3.small EC2, 30 GiB gp3 data disk, db.t4g.micro PostgreSQL 16,
 # single AZ, 7 days of RDS backups, 14 days of container logs, no NAT gateway.
 # Never put credentials or secret values in this file.
+
+# Copy the repository's actual OIDC subject; include owner/repository IDs if used.
+# Protect the GitHub production environment to allow main and release tags only.
+# github_oidc_subject = "repo:OWNER/REPOSITORY:environment:production"
+# Set this when the AWS account already has a GitHub OIDC provider:
+# github_oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"

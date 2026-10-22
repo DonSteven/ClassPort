@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
+# Internal application switch after classport-release prepares the database.
 # Usage: deploy-prod.sh RELEASE_BUNDLE_DIRECTORY | --rollback
-# A bundle contains release.env, docker-compose.prod.yml and deploy-prod.sh.
-# EC2 needs Docker Compose, Bash, curl, flock and a mounted data disk; no build tools.
 set -euo pipefail
 
 ROOT="${CLASSPORT_DEPLOY_ROOT:-/opt/classport}"
@@ -42,15 +41,64 @@ compose() {
         --env-file "$release/release.env" -f "$release/docker-compose.prod.yml" "$@"
 }
 
+manifest_json() {
+    load_manifest "$1/release.env"
+    printf '{"commit":"%s","backend":"%s","frontend":"%s"}' \
+        "$RELEASE_COMMIT" "$BACKEND_IMAGE" "$FRONTEND_IMAGE"
+}
+
+write_result() {
+    local status="$1" code="$2" current=null name separator='' finished=null
+    if [ -L "$STATE/current" ]; then
+        current=$(manifest_json "$STATE/current")
+    fi
+    [ "$status" = running ] || finished="\"$(date -u +%FT%TZ)\""
+    {
+        printf '{"manifest":%s,"status":"%s","exit_code":%s,"started_at":"%s","finished_at":%s,' \
+            "$requested" "$status" "$code" "$started" "$finished"
+        printf '"failed_stage":"%s","rollback":"%s","current_release":%s,"steps":{' \
+            "$failed_stage" "$rollback" "$current"
+        for name in configuration pull start readiness smoke images promote; do
+            printf '%s"%s":"%s"' "$separator" "$name" "${outcomes[$name]}"
+            separator=,
+        done
+        printf '}}\n'
+    } > "$result_file.tmp"
+    mv -f "$result_file.tmp" "$result_file"
+}
+
+start_step() { stage="$1"; outcomes[$stage]=running; write_result running 0; }
+pass_step() { outcomes[$stage]=succeeded; write_result running 0; }
+
+verify_images() {
+    local release="$1" backend frontend container actual service expected
+    load_manifest "$release/release.env"
+    backend="$BACKEND_IMAGE"; frontend="$FRONTEND_IMAGE"
+    for service in classport frontend; do
+        expected="$backend"
+        [ "$service" != frontend ] || expected="$frontend"
+        container=$(compose "$release" ps -q "$service") || return 1
+        [ -n "$container" ] || return 1
+        actual=$(docker inspect --format '{{.Config.Image}}' "$container") || return 1
+        [ "$actual" = "$expected" ] || return 1
+    done
+}
+
 check_release() {
-    local release="$1" body deadline
+    local release="$1" body deadline track=0
+    [ "$release" != "$candidate" ] || track=1
+    [ "$track" -eq 0 ] || start_step readiness
     deadline=$((SECONDS + HEALTH_TIMEOUT))
     while [ "$SECONDS" -lt "$deadline" ]; do
         body=$(curl -fsS --max-time 3 "$HEALTH_URL" 2>/dev/null) || body=''
         if [[ $body =~ \"ok\"[[:space:]]*:[[:space:]]*true ]]; then
+            [ "$track" -eq 0 ] || { pass_step; start_step smoke; }
             log "readiness passed; checking login page, API and MCP"
-            compose "$release" run --rm --no-deps --pull never smoke
-            return $?
+            compose "$release" run --rm --no-deps --pull never smoke || return $?
+            [ "$track" -eq 0 ] || { pass_step; start_step images; }
+            verify_images "$release" || return 1
+            [ "$track" -eq 0 ] || pass_step
+            return 0
         fi
         sleep 2
     done
@@ -65,16 +113,10 @@ point_to() {
 }
 
 restore_records() {
-    if [ -n "$old" ]; then
-        point_to current "$old" || return 1
-    else
-        rm -f "$STATE/current" || return 1
-    fi
-    if [ -n "$old_previous" ]; then
-        point_to previous "$old_previous" || return 1
-    else
-        rm -f "$STATE/previous" || return 1
-    fi
+    if [ -n "$old" ]; then point_to current "$old" || return 1
+    else rm -f "$STATE/current" || return 1; fi
+    if [ -n "$old_previous" ]; then point_to previous "$old_previous" || return 1
+    else rm -f "$STATE/previous" || return 1; fi
 }
 
 [ "$#" -eq 1 ] || die "usage: $0 RELEASE_BUNDLE_DIRECTORY | --rollback"
@@ -82,30 +124,20 @@ restore_records() {
 mkdir -p "$STATE"
 exec 9>"$STATE/deploy.lock"
 flock -n 9 || die "another production deployment is running"
-
 for name in .env .env.smoke; do
     [ -f "$ROOT/$name" ] || die "$ROOT/$name missing"
 done
-if [ "$1" != --rollback ]; then
-    [ -f "$ROOT/.env.migration" ] || die "$ROOT/.env.migration missing"
-fi
 [ -f "$ROOT/certs/global-bundle.pem" ] || die "RDS CA bundle missing"
 mountpoint -q "$ROOT/data" || die "$ROOT/data must be the mounted persistent data disk"
 mkdir -p "$ROOT/data/courses"
-
 old=''
 if [ -L "$STATE/current" ]; then
     old=$(readlink -f "$STATE/current")
     [ -d "$old" ] || die "current release directory missing"
 fi
 old_previous=''
-if [ -L "$STATE/previous" ]; then
-    old_previous=$(readlink "$STATE/previous")
-fi
-
-rollback_only=0
+[ ! -L "$STATE/previous" ] || old_previous=$(readlink "$STATE/previous")
 if [ "$1" = --rollback ]; then
-    rollback_only=1
     [ -L "$STATE/previous" ] || die "no previous successful release"
     candidate=$(readlink -f "$STATE/previous")
     [ -d "$candidate" ] || die "previous release directory missing"
@@ -119,68 +151,76 @@ else
     cp "$bundle/release.env" "$bundle/docker-compose.prod.yml" "$bundle/deploy-prod.sh" "$candidate/"
 fi
 
-same_release=0
-if [ -n "$old" ]; then
-    load_manifest "$candidate/release.env"
-    candidate_backend="$BACKEND_IMAGE"
-    candidate_frontend="$FRONTEND_IMAGE"
-    load_manifest "$old/release.env"
-    if [ "$BACKEND_IMAGE" = "$candidate_backend" ] && \
-       [ "$FRONTEND_IMAGE" = "$candidate_frontend" ] && \
-       cmp -s "$old/docker-compose.prod.yml" "$candidate/docker-compose.prod.yml"; then
-        same_release=1
-    fi
-fi
-
-compose "$candidate" config -q
-log "pulling the release image pair"
-compose "$candidate" pull --policy missing classport frontend
-
-if [ "$rollback_only" -eq 0 ]; then
-    log "running the release's one-shot database migration"
-    compose "$candidate" run --rm --no-deps --pull never migrate
-    log "reconciling the operator with maintenance credentials"
-    compose "$candidate" run --rm --no-deps --pull never migrate \
-        uv run --no-sync python scripts/seed_operator_password.py
-fi
-
+requested=$(manifest_json "$candidate")
+started=$(date -u +%FT%TZ)
+result_file="${CLASSPORT_APPLICATION_RESULT:-$candidate/application-result.json}"
+declare -A outcomes=([configuration]=pending [pull]=pending [start]=pending [readiness]=pending [smoke]=pending [images]=pending [promote]=pending)
+stage=configuration
+failed_stage=''
+rollback=not_needed
 records_changed=0
+switch_started=0
 on_exit() {
-    local status="$1" records_restored=1
+    local status="$1" records_restored=1 code=1
     trap - EXIT INT TERM
     [ "$status" -ne 0 ] || return 0
-    log "release failed; committed database changes are not reverted"
+    failed_stage="$stage"
+    outcomes[$stage]=failed
+    log "release failed at $stage; committed database changes are not reverted"
     if [ "$records_changed" -eq 1 ] && ! restore_records; then
         log "failed to restore release records; manual intervention required"
         records_restored=0
     fi
-    compose "$candidate" logs --tail 40 classport frontend || true
-    if [ -z "$old" ]; then
-        log "no previous successful release is recorded"
-        [ "$records_restored" -eq 1 ] || exit 2
-        exit 1
+    if [ "$switch_started" -eq 1 ]; then
+        compose "$candidate" logs --tail 40 classport frontend || true
+        if [ -z "$old" ]; then
+            rollback=no_previous_release
+            log "no previous successful release is recorded"
+        elif compose "$old" up -d --no-build --pull never classport frontend && check_release "$old"; then
+            rollback=succeeded
+            log "previous image pair restored; deployment remains failed"
+        else
+            rollback=failed
+            log "rollback failed; manual intervention required"
+            code=2
+        fi
     fi
-    log "restoring both images from $old"
-    if compose "$old" up -d --no-build --pull never classport frontend && check_release "$old"; then
-        [ "$records_restored" -eq 1 ] || exit 2
-        log "previous image pair restored; deployment remains failed"
-        exit 1
-    fi
-    log "rollback failed; manual intervention required"
-    exit 2
+    [ "$records_restored" -eq 1 ] || code=2
+    write_result failed "$code"
+    exit "$code"
 }
-
 trap 'on_exit $?' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+
+start_step configuration
+same_release=0
+if [ -n "$old" ]; then
+    load_manifest "$candidate/release.env"
+    candidate_backend="$BACKEND_IMAGE"; candidate_frontend="$FRONTEND_IMAGE"
+    load_manifest "$old/release.env"
+    if [ "$BACKEND_IMAGE" = "$candidate_backend" ] && [ "$FRONTEND_IMAGE" = "$candidate_frontend" ] && \
+       cmp -s "$old/docker-compose.prod.yml" "$candidate/docker-compose.prod.yml"; then
+        same_release=1
+    fi
+fi
+compose "$candidate" config -q
+pass_step
+start_step pull
+log "pulling the release image pair"
+compose "$candidate" pull --policy missing classport frontend
+pass_step
+start_step start
+switch_started=1
 log "starting the release image pair"
 compose "$candidate" up -d --no-build --pull never classport frontend
+pass_step
 check_release "$candidate"
-
+start_step promote
 records_changed=1
-if [ -n "$old" ] && [ "$same_release" -eq 0 ]; then
-    point_to previous "$old"
-fi
+if [ -n "$old" ] && [ "$same_release" -eq 0 ]; then point_to previous "$old"; fi
 point_to current "$candidate"
+pass_step
+write_result succeeded 0
 trap - EXIT INT TERM
 log "release passed; current release is $candidate"

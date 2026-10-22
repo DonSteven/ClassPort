@@ -26,12 +26,14 @@ must be approved by the operator before execution.
 | `cloud-init.yaml`, `scripts/setup-host.sh` | Install Docker Compose/Caddy/AWS CLI, identify and mount EBS, configure HTTPS/logging |
 | `scripts/create-config.py` | Generate initial secrets locally with hidden password input |
 | `scripts/bootstrap.py` | Provision DB identities, apply existing migrations and initialize operator/release checks |
-| `scripts/release.sh`, `scripts/publish-images.sh` | Publish committed source to ECR and invoke the existing release process |
+| `scripts/release.sh`, `../../scripts/publish_release.py`, `../../scripts/deploy_via_ssm.py` | One GitHub release flow: publish/reuse ECR images, invoke SSM and retain results |
 | `tests/environment.tftest.hcl`, `../../tests/test_aws_bootstrap.py` | Mock AWS tests and real local PostgreSQL permissions/bootstrap tests |
 
-The host embeds the repository's `docker-compose.prod.yml` and `deploy-prod.sh`.
-It downloads images rather than building application source on EC2. No app API or
-schema migrations are changed by this infrastructure module.
+The backend image includes its Compose file, application switch script and DB
+bootstrap helper under `/app/release`. The stable host launcher extracts those
+files from the selected digest on every release. Application releases do not
+change user data or rebuild EC2. No app API or schema migration is changed by
+this infrastructure module.
 
 ## Local validation (no AWS account)
 
@@ -50,18 +52,17 @@ terraform -chdir=infra/aws test
 
 Prerequisites: an AWS account with authenticated CLI credentials and permission
 to create the declared VPC, EC2, IAM, RDS, ECR, S3, Secrets Manager and logs
-resources; Terraform 1.13.5+; local Docker Buildx and Python 3
-for publishing. For interactive SSM access install the AWS Session Manager plugin
+resources; Terraform 1.13.5+ and Python 3 for initial configuration. For interactive SSM access install the AWS Session Manager plugin
 locally. This module targets standard commercial AWS regions with two AZs.
 
 Prefer an AWS CLI profile using IAM Identity Center/SSO or another short-lived
 credential source. For example, configure and log in with `aws configure sso
 --profile classport`, then set `AWS_PROFILE=classport` in the shell running
-Terraform, publishing and SSM. Terraform and AWS CLI use the normal credential
+Terraform and administrative SSM. Terraform and AWS CLI use the normal credential
 chain; never put access keys in `.tfvars`, user data or Git. `aws sts
 get-caller-identity` can confirm the intended account without printing keys.
 The provisioning identity needs IAM/PassRole permissions and access to the listed
-services; the publisher needs ECR push rights, the configuration operator needs
+services; the GitHub release role gets scoped ECR/SSM rights, the configuration operator needs
 `secretsmanager:PutSecretValue` on this application secret, and the administrator
 needs SSM session rights. EC2 receives its own separate instance role.
 
@@ -145,48 +146,49 @@ Fernet encryption key or session/database passwords on normal releases. Keep the
 application secret for recovery; changing the Fernet key would make stored user
 integration secrets unreadable. Automatic app credential rotation is not configured.
 
-## 3. Publish and deploy
+## 3. Enable GitHub delivery
 
-Publish a committed source revision after operator approval. The helper builds a
-clean archive of that commit, sets the frontend's public HTTPS origin and pushes
-the two `linux/amd64` images. It prints one command with immutable image digests.
-Use a new commit for subsequent releases; ECR tags are immutable.
+Follow [Production delivery](../../docs/PRODUCTION.md) to configure the production
+GitHub environment, exact OIDC subject and variables from Terraform outputs.
+`github_oidc_subject` defaults to null: GitHub access is enabled only when the
+actual trusted subject is supplied and the approved infrastructure update applied.
+Reuse an existing account-wide provider with `github_oidc_provider_arn`.
 
-```bash
-bash infra/aws/scripts/publish-images.sh HEAD
-aws ssm start-session \
-  --target "$(terraform -chdir=infra/aws output -raw instance_id)" \
-  --region "$AWS_REGION"
-```
+Push to protected main, use a protected release tag, or manually run Deploy.
+Every trigger checks one main-history commit, publishes/reuses its immutable ECR
+images, tests the exact digests, then sends and waits for SSM execution. GitHub
+holds no application/database secret or long-lived AWS key. EC2 pulls images and
+reads current configuration with its own instance role.
 
-In the SSM session, wait for host initialization, then run the printed command:
-
-```bash
-sudo cloud-init status --wait
-sudo test -f /opt/classport/.host-ready
-sudo classport-release BACKEND_ECR_URL@sha256:DIGEST FRONTEND_ECR_URL@sha256:DIGEST COMMIT_SHA
-```
-
-The host pulls using its IAM role, reads secrets into a root-only temporary
-directory under `/run`, provisions separate runtime/migration DB accounts, applies
-the image's existing migrations, seeds the operator, and initializes a separate
-release-check user and a 30-day MCP token. Each AWS release refreshes only that
-check account/token. Existing operator password hashes are preserved by the seed
-script. The host writes `.env`, `.env.migration` and `.env.smoke` with mode `0600`;
-plaintext operator/master passwords are not written to those files. Temporary
-secret files are removed when the command exits.
+One maintenance container prepares DB roles, applies migrations once, configures
+runtime access and initializes accounts. The root-only temporary secret directory
+is removed on exit. Only runtime `.env` and release-check `.env.smoke` files are
+retained with mode `0600`; database maintenance credentials remain in Secrets
+Manager and the temporary maintenance process. Operator hashes are preserved by
+the existing seed script; the separate release-check account/token is refreshed.
 
 The runtime login has DML grants, no DDL/role administration or migration-table
-access, and no membership in the migration role. To preserve the current app's
-application-level tenant isolation on RDS, a role-specific permissive policy is
-added to existing RLS tables. This does not enforce database-level tenant RLS;
-see [the existing RLS design](../../docs/RLS.md). RDS certificate/hostname
-verification is enabled for both runtime and maintenance connections.
+access, and no membership in the migration role. A role-specific permissive policy
+preserves current application-level user isolation on existing RLS tables. This
+does not enforce database-level tenant RLS; see [the RLS design](../../docs/RLS.md).
+RDS certificate/hostname verification remains enabled.
 
-The backend/frontend run on the Docker bridge. IMDSv2 is required with hop limit
-1 so these containers cannot retrieve the host's Secrets Manager permissions.
-The short-lived maintenance container uses host networking for initial setup;
-the host and its administrators are trusted. No AWS static keys are stored on it.
+The backend/frontend run on the Docker bridge with IMDSv2 hop limit 1, so they
+cannot retrieve host Secrets Manager permissions. The short-lived maintenance
+container uses host networking; the host and its administrators are trusted.
+
+### Activating an existing host
+
+Inspect the Terraform plan before applying any infrastructure update. The module
+uses `user_data_replace_on_change = true`; changing host initialization, including
+the initial transition to the stable launcher, can plan an EC2 replacement. Never
+apply that replacement as an unnoticed part of application delivery. Choose and
+approve the actual infrastructure/host update before enabling automatic releases.
+An existing host must have the reviewed `scripts/release.sh` installed at
+`/usr/local/sbin/classport-release` with root ownership and mode `0700`.
+Future application releases use their image's files and do not require a host
+initialization update. Keep the application secret, EBS data and required release
+records available throughout any separately approved host maintenance.
 
 ## Acceptance and operations
 
@@ -201,15 +203,13 @@ An apply alone does not demonstrate end-to-end acceptance.
 Container stdout/stderr goes to the `log_group` output with 14-day retention.
 Host setup diagnostics: `sudo journalctl -u cloud-final` and
 `sudo journalctl -u caddy`. No access logging of OAuth query strings is enabled.
-All releases must use `classport-release` to renew ECR authentication and read
-current configuration. The existing GitHub workflow still publishes to GHCR;
-it is not the publisher for this ECR/SSM path.
+GitHub retains the release manifest and SSM/database/application results. The
+host retains attempt reports under `/opt/classport/attempts` and full command logs
+under `/opt/classport/commands`. See the production guide for the artifact names,
+failure semantics and timeout handling.
 
-Rollback in an SSM session:
-
-```bash
-sudo bash /opt/classport/releases/current/deploy-prod.sh --rollback
-```
+Emergency rollback uses the saved previous image pair; follow the authenticated
+SSM procedure in [Production delivery](../../docs/PRODUCTION.md#emergency-rollback).
 
 RDS keeps seven days of automated backups. The S3 backup bucket is private,
 versioned, encrypted and HTTPS-only. The instance can upload backup objects but
@@ -221,7 +221,7 @@ EBS is separate from EC2 and has `prevent_destroy`; Docker requires its mount
 before starting on reboot. On initial boot only an unsigned empty disk matching
 the exact EBS volume ID is formatted; an existing ext4 volume is mounted intact.
 Cloud-init changes replace EC2 while preserving that volume and EIP. The new host
-needs `classport-release` again to restore the running containers and host config.
+needs a GitHub release to restore the running containers and host config.
 Instance resize and disk growth/filesystem expansion are operator maintenance.
 
 RDS deletion protection defaults on, final snapshots are mandatory, and S3/ECR

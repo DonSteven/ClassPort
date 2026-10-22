@@ -5,6 +5,8 @@ from pathlib import Path
 import subprocess
 import sys
 from urllib.parse import quote
+from unittest.mock import Mock
+import json
 
 from argon2 import PasswordHasher
 from cryptography.fernet import Fernet
@@ -37,6 +39,45 @@ def test_config_validation_and_raw_secret_files(tmp_path):
     bootstrap.write_env(target, {"APP_PASSWORD_HASH": "$argon2id$literal-value"})
     assert target.stat().st_mode & 0o777 == 0o600
     assert target.read_text() == "APP_PASSWORD_HASH=$argon2id$literal-value\n"
+
+
+@pytest.mark.parametrize("fail_migration", [False, True])
+def test_database_preparation_runs_one_migration_before_grants_and_accounts(monkeypatch, tmp_path, fail_migration):
+    for name in ("PGSSLMODE", "PGSSLROOTCERT", "PGCONNECT_TIMEOUT"):
+        monkeypatch.setenv(name, "")
+    config = {key: "test-secret" for key in bootstrap.REQUIRED_KEYS}
+    config.update(OPERATOR_EMAIL="operator@example.test", SMOKE_EMAIL="smoke@example.test",
+                  APP_DB_PASSWORD="runtime-only", MIGRATION_DB_PASSWORD="maintenance-only",
+                  SECRETS_ENCRYPTION_KEY=Fernet.generate_key().decode())
+    monkeypatch.setenv("DB_HOST", "database.example.test")
+    monkeypatch.setenv("DB_NAME", "study")
+    monkeypatch.setenv("PUBLIC_URL", "https://study.example.test")
+    calls = []
+    monkeypatch.setattr(bootstrap, "provision_roles", lambda *args: calls.append("roles"))
+    monkeypatch.setattr(bootstrap, "grant_runtime_access", lambda *args: calls.append("grants"))
+    monkeypatch.setattr(bootstrap, "seed_smoke", lambda *args: calls.append("smoke_account"))
+
+    def run(args, **kwargs):
+        calls.append(Path(args[-1]).name)
+        if fail_migration:
+            raise subprocess.CalledProcessError(1, args, stderr="test-secret")
+
+    runner = Mock(side_effect=run)
+    monkeypatch.setattr(bootstrap.subprocess, "run", runner)
+    result_file = tmp_path / "database-result.json"
+    if fail_migration:
+        with pytest.raises(subprocess.CalledProcessError):
+            bootstrap.bootstrap(config, {"username": "admin", "password": "test-secret"}, tmp_path, result_file)
+        assert calls == ["roles", "run_migrations.py"]
+    else:
+        bootstrap.bootstrap(config, {"username": "admin", "password": "test-secret"}, tmp_path, result_file)
+        assert calls == ["roles", "run_migrations.py", "grants", "seed_operator_password.py", "smoke_account"]
+        assert not (tmp_path / ".env.migration").exists()
+        assert "MIGRATION_DATABASE_URL" not in (tmp_path / ".env").read_text()
+    report = json.loads(result_file.read_text())
+    assert report["steps"]["migration"] == ("failed" if fail_migration else "succeeded")
+    assert report["status"] == ("failed" if fail_migration else "succeeded")
+    assert "test-secret" not in result_file.read_text()
 
 
 def test_fresh_database_uses_separate_non_admin_runtime_role(monkeypatch):

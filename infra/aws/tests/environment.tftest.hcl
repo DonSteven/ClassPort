@@ -31,6 +31,12 @@ mock_provider "aws" {
   mock_resource "aws_ebs_volume" {
     defaults = { id = "vol-0123456789abcdef0" }
   }
+  mock_resource "aws_instance" {
+    defaults = { id = "i-0123456789abcdef0" }
+  }
+  mock_resource "aws_iam_openid_connect_provider" {
+    defaults = { arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com" }
+  }
   mock_resource "aws_cloudwatch_log_group" {
     defaults = { arn = "arn:aws:logs:us-east-1:123456789012:log-group:/classport/containers" }
   }
@@ -41,6 +47,48 @@ mock_provider "aws" {
     target          = aws_security_group.app
     override_during = plan
     values          = { id = "sg-0123456789abcdef0" }
+  }
+}
+
+run "github_deployment_is_scoped_to_one_production_subject" {
+  command = plan
+  variables {
+    github_oidc_subject = "repo:example@123/ClassPort@456:environment:production"
+  }
+  assert {
+    condition = (
+      length(aws_iam_openid_connect_provider.github) == 1 &&
+      jsondecode(aws_iam_role.github[0].assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == var.github_oidc_subject &&
+      jsondecode(aws_iam_role.github[0].assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:aud"] == "sts.amazonaws.com"
+    )
+    error_message = "GitHub trust must use the exact production subject and STS audience."
+  }
+  assert {
+    condition = (
+      length(jsondecode(aws_iam_role_policy.github[0].policy).Statement[1].Resource) == 2 &&
+      jsondecode(aws_iam_role_policy.github[0].policy).Statement[2].Resource == [
+        "arn:aws:ssm:us-east-1::document/AWS-RunShellScript",
+        "arn:aws:ec2:us-east-1:123456789012:instance/i-0123456789abcdef0"
+      ] &&
+      !strcontains(aws_iam_role_policy.github[0].policy, "secretsmanager:") &&
+      !strcontains(aws_iam_role_policy.github[0].policy, "iam:")
+    )
+    error_message = "Release permissions must target this image pair and instance without configuration or IAM access."
+  }
+}
+
+run "existing_github_provider_is_reused" {
+  command = plan
+  variables {
+    github_oidc_subject      = "repo:example/ClassPort:environment:production"
+    github_oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
+  }
+  assert {
+    condition = (
+      length(aws_iam_openid_connect_provider.github) == 0 &&
+      jsondecode(aws_iam_role.github[0].assume_role_policy).Statement[0].Principal.Federated == var.github_oidc_provider_arn
+    )
+    error_message = "An existing account-wide GitHub identity provider must not be recreated."
   }
 }
 
@@ -55,7 +103,8 @@ run "minimum_private_environment" {
   assert {
     condition = (
       length(aws_instance.app.user_data_base64) <= 21848 &&
-      length(yamldecode(local.cloud_init).write_files) == 8
+      length(yamldecode(local.cloud_init).write_files) == 5 &&
+      !strcontains(local.cloud_init, "/opt/classport/aws/")
     )
     error_message = "Cloud-init must be valid YAML and fit EC2's 16 KiB compressed user-data limit."
   }

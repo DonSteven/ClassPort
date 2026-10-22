@@ -1,169 +1,138 @@
-# EC2 / RDS releases
+# Production delivery
 
-For a fresh AWS account/environment, use the [Terraform AWS deployment](../infra/aws/README.md).
-It provisions the host, private RDS, ECR, persistent storage, secrets and HTTPS,
-including first-install database/account setup and an ECR/SSM release entrypoint.
-The manual setup and GHCR workflow below remain available for existing hosts.
+Production uses one GitHub Actions → ECR → SSM → EC2 release flow. The local
+`deploy.sh` remains the local Docker development workflow. Provisioning, HTTPS,
+persistent storage and initial secrets are described in [the AWS guide](../infra/aws/README.md).
 
-The local `deploy.sh` and `docker-compose.yml` retain their existing behavior.
-Cloud releases use `deploy-prod.sh` and the standalone `docker-compose.prod.yml`.
-EC2 downloads the CI-built images; it never builds source code or installs Node,
-pnpm, Python, or application dependencies on the host.
+## Configure the release environment
 
-## Prepare EC2 once
+Create the GitHub `production` environment. Restrict its deployment branches/tags
+to `main` and protected `v*.*.*` release tags; restrict who may create those tags.
+Protect `main` with required CI checks. Both the publisher and deploy job use this
+environment. Required reviewers are optional; configuring them pauses those jobs
+for approval instead of allowing fully automatic releases.
 
-Use an x86-64 Linux EC2 instance: the release workflow builds `linux/amd64`.
-Install Docker with Compose v2.30+, Bash, curl, and the usual Linux utilities
-including `flock` and `mountpoint`. The SSH deployment user must be able to run
-Docker and write `/opt/classport`.
+Set `github_oidc_subject` in Terraform to this repository's actual production
+OIDC subject. Use the exact subject, including immutable owner/repository IDs
+when GitHub uses them. Its final segment must be `:environment:production`.
+If the AWS account already has the GitHub OIDC provider, supply
+`github_oidc_provider_arn` to reuse it. The default null subject grants no GitHub
+access. See [GitHub's AWS OIDC guide](https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws).
 
-Mount the persistent data disk at `/opt/classport/data`, and configure it to
-mount after reboot. The script refuses to run if this is not a mount point,
-preventing an absent EBS volume from silently sending uploads to the root disk.
-It creates `data/courses` on that disk and binds it to `/opt/courses` in the app.
-Put existing course data there using the current per-user directory layout before
-the first cloud release. The cloud script does not run the historical file-layout
-migration.
+Set these variables in the production environment:
 
-Configure EBS retention and snapshots separately. Follow the
-[AWS EBS mount instructions](https://docs.aws.amazon.com/ebs/latest/userguide/ebs-using-volumes.html)
-for the device actually attached to your instance. Formatting/mounting disks are
-administrator operations, not actions performed by the release script.
-
-```text
-/opt/classport/
-  .env                      runtime RDS login and application settings
-  .env.migration            migration RDS login and operator initialization
-  .env.smoke                dedicated smoke account and MCP token
-  certs/global-bundle.pem   RDS CA bundle
-  data/                     mounted persistent disk
-    courses/                current per-user course tree
-  incoming/                 bundles transferred by CI
-  releases/                 retained bundles and current/previous links
-```
-
-Configure RDS and separate runtime/migration roles as described in
-[DATABASE.md](DATABASE.md#rds--external-postgresql). Both URLs must target the
-same RDS database. Set `PGSSLMODE=verify-full` and
-`PGSSLROOTCERT=/etc/classport/certs/global-bundle.pem` in both env files.
-Provision runtime permissions/default grants before deployment. Do not pass the
-migration URL to the runtime container.
-
-Set `PUBLIC_URL` in `.env` to the public HTTPS origin. The outer TLS proxy forwards
-this origin to `127.0.0.1:8080`; the backend has no host port in production. Allow
-RDS traffic from EC2, without opening RDS to the internet. Production starts no
-database container.
-
-Copy `.env.smoke.example` to `.env.smoke` and supply:
-
-- The public HTTPS origin (`SMOKE_BASE_URL`).
-- A dedicated account's email/password, with TOTP disabled.
-- A valid, unexpired MCP OAuth access token for that account, obtained through
-  the existing OAuth flow. Renew it before expiry. Deployment does not mint tokens.
-
-Prepare the account/token during initial database bootstrap, before the first
-release. Checks log in and read that account's courses through REST and MCP; they
-do not create or delete courses. Login records normal authentication audit and
-rate-limit entries. Protect the three env files with mode `600`. They stay on EC2
-and are never uploaded as release artifacts.
-
-For private GHCR packages, log Docker on EC2 into GHCR with package read access.
-Keep that credential on the host, outside release files.
-
-## Configure GitHub Actions
-
-Create these repository variables:
-
-| Variable | Value |
+| Variable | Terraform output or value |
 |---|---|
-| `PUBLIC_SITE_URL` | Required production HTTPS origin; baked into the frontend |
-| `PUBLIC_SITE_NAME` | Optional display name; defaults to ClassPort |
+| `AWS_REGION` | `aws_region` |
+| `AWS_DEPLOY_ROLE_ARN` | `github_deploy_role_arn` |
+| `AWS_INSTANCE_ID` | `instance_id` |
+| `BACKEND_REPOSITORY` | `backend_repository` |
+| `FRONTEND_REPOSITORY` | `frontend_repository` |
+| `PUBLIC_SITE_URL` | `public_url`, the same HTTPS origin configured on the host |
+| `PUBLIC_SITE_NAME` | Optional; defaults to ClassPort |
 | `PUBLIC_SHOW_LANDING` | Optional; defaults to false |
-| `PUBLIC_GOOGLE_SITE_VERIFICATION` | Optional search verification value |
+| `PUBLIC_GOOGLE_SITE_VERIFICATION` | Optional |
 
-Create the `production` GitHub environment with these deployment secrets:
+The GitHub role can publish/read the two ECR repositories and send the approved
+shell document to the one EC2 instance. It cannot read Secrets Manager or manage
+IAM. SSM executes as root on that host, so granting this deployment role is a
+privileged trust decision. The host's separate role reads application/database
+configuration. No AWS access key, SSH key, application password or database URL
+is stored in GitHub release configuration.
 
-| Secret | Value |
-|---|---|
-| `EC2_HOST` | EC2 SSH hostname/address |
-| `EC2_USER` | Deployment user |
-| `EC2_SSH_KEY` | SSH private key for that user |
-| `EC2_KNOWN_HOSTS` | Verified OpenSSH known-hosts entry for that hostname/address |
+## One release
 
-GitHub's token publishes two GHCR packages associated with the repository and
-reads them back for verification. Enable package permissions if organization
-policy restricts them. EC2 uses its own package read credential; GitHub's token
-is not sent to EC2.
+Push to protected `main`, push a protected version tag, or use Deploy's manual
+Run workflow button. Every target must resolve to a commit on `main` history.
+All triggers follow the same gates:
 
-Trigger Deploy with an explicit ref, or push a `v*.*.*` tag. It:
+1. Resolve one commit and run existing source checks against that SHA.
+2. Query each immutable ECR SHA tag. Reuse an existing image; build/push only a
+   missing image. This also resumes a run that published just one image.
+3. Pull both registry digests, verify their commit labels and bundled release
+   files, then test login, assets, authenticated REST and MCP against disposable
+   PostgreSQL. Reused images are tested again on every run.
+4. Save `release.env` with the commit and both digests, plus `images.json`.
+5. Use a short-lived OIDC session to send one SSM command. Wait for its final
+   status and exit code, then validate the host result and running image pair.
 
-1. Resolves one commit and runs source checks against it.
-2. Builds/publishes both images and captures their registry digests.
-3. Pulls those exact digests and tests them against disposable PostgreSQL:
-   login, static assets, authenticated REST, MCP initialization and a read-only tool.
-4. Creates the `production-release` artifact containing `release.env`, the
-   production Compose file, and the cloud deployment script.
-5. Transfers that verified bundle to EC2 and invokes the script.
+A SHA tag is immutable. Changes to frontend public settings require a new commit;
+rerunning an old commit intentionally reuses its originally built frontend.
 
-`release.env` contains `RELEASE_COMMIT`, `BACKEND_IMAGE` and `FRONTEND_IMAGE`;
-see `.env.release.example`. Full registry digests are mandatory. Mutable tags,
-including commit tags, are rejected as deployment input. Changing frontend public
-settings requires a new CI build because Vite embeds them.
+The root-only `classport-release` entrypoint locks the host, pulls both digests
+and verifies their commit labels. It extracts Compose, `deploy-prod.sh` and
+`bootstrap.py` from `/app/release` in that backend image to a version directory.
+Application release files are never read from EC2 user data.
 
-## Deployment and recovery
+The one maintenance container uses that backend digest to prepare roles, run
+migrations once, grant runtime access, seed the operator/check account and write
+runtime configuration, in that order. Only this short-lived container sees
+administrator and migration credentials. Secret input files under `/run` are
+removed on exit; no `.env.migration` file is retained on the AWS host.
 
-The script locks deployment, validates the bundle, ensures both images are
-available locally, runs one migration job using the candidate backend image, and
-reconciles the operator with maintenance credentials. It updates the app/frontend
-with building and further pulling disabled.
+The versioned `deploy-prod.sh` switches both application images with building
+disabled. It checks readiness through the frontend, performs public HTTPS login,
+REST and MCP checks, and inspects both running container image references against
+the requested digests. Only success advances `releases/current` and `previous`.
 
-Readiness is checked through the frontend at `/api/health/ready`. The smoke job
-uses `.env.smoke` to check the public login HTML and assets, log in and read the
-course API, then initialize MCP, list tools and call `list_courses`. A 200 SPA
-fallback or an unauthenticated MCP response does not count as success. The smoke
-job runs inside the backend image; the host does not need Python.
+## Results and failures
 
-Only a successful release advances `releases/current`; the previous successful
-bundle becomes `releases/previous`. Repeating the same image pair and identical
-Compose configuration preserves the existing rollback target. Each bundle retains
-its Compose configuration and both digests. A failed pull/migration does not replace
-containers. Failure after switching begins restores both old images/configuration
-and repeats checks; changes to current/previous records are also undone.
-Deployment stays failed even when recovery succeeds (exit 1); failed recovery
-exits 2. A failed first deployment has no recorded version to restore and requires
-operator attention. Do not prune images needed by current/previous, delete their
-bundles, or expire their GHCR packages.
+GitHub retains these artifacts for 90 days:
 
-Restore the previous successful image pair manually:
+- `production-release`: commit, exact image pair and build/reuse results.
+- `production-deployment-result`: the manifest, SSM command ID, invocation status,
+  output tail, database step outcomes, application checks and recovery result.
+- `production-pipeline-result`: check/publish/deploy job results, including skipped
+  jobs when an earlier gate failed. The run summary shows the same stage results.
+
+The host saves `/opt/classport/attempts/COMMIT.RUN_ID-ATTEMPT/result.json`, including
+start/end times, requested images, database preparation and application outcomes.
+Database and application reports are kept alongside it. The SSM launcher stores
+the full command log under `/opt/classport/commands/COMMIT.RUN_ID-ATTEMPT.log` and
+returns a bounded tail plus the structured result to GitHub.
+
+A failed check never starts production deployment. Pull/database preparation
+failure stops before the application switch. Failure after switching starts
+restores both old images/configuration and repeats their checks. Recovery success
+still returns failure (exit 1); failed recovery returns exit 2. A failed first
+release has no previous version to restore. Current/previous promotion failures
+also restore the recorded pointers.
+
+An SSM timeout or query failure is recorded as unconfirmed remote state, never as
+success. Inspect the saved command ID and host result before starting another
+release; a second command is not automatically sent. The host lock also prevents
+an overlapping application deployment. See [SSM command results](https://docs.aws.amazon.com/cli/latest/reference/ssm/get-command-invocation.html).
+
+## Emergency rollback
+
+In an administrator SSM session, authenticate to ECR using the host role and run
+the current release's rollback script:
 
 ```bash
-bash /opt/classport/releases/current/deploy-prod.sh --rollback
+sudo bash -c '
+  set -euo pipefail
+  set -a
+  source /etc/classport/host.env
+  set +a
+  aws ecr get-login-password | docker login --username AWS --password-stdin "${BACKEND_REPOSITORY%%/*}"
+  bash /opt/classport/releases/current/deploy-prod.sh --rollback
+'
 ```
 
-Manual rollback skips migrations/initialization, obtains missing images from the
-saved digests if necessary, and verifies the result. Successful rollback makes the
-replaced release available as `previous`.
+Keep both current/previous image pairs and their saved Compose files available.
+Rollback checks the restored services and skips database initialization. A normal
+release is always initiated through GitHub; directly invoking the application
+switch script is not a complete release.
 
-To deploy a downloaded `production-release` artifact, extract it on EC2 and run:
+## Database compatibility and acceptance
 
-```bash
-bash /path/to/bundle/deploy-prod.sh /path/to/bundle
-```
+Image rollback does not undo committed migrations or user writes. The previous
+app continues running while migrations apply, so schema changes must support it
+through the rollback window. Keep applied migration files immutable. Database
+backup restoration is a separate recovery operation.
 
-For a different root set `CLASSPORT_DEPLOY_ROOT` on every invocation; its `data/`
-must be the mounted persistent disk. App secrets, RDS credentials, proxy settings
-and data are shared host state, not snapshotted by an image release.
-
-## Database compatibility
-
-Migration runners use a database advisory lock: competing runners fail before
-reading/applying stale migration lists. The pending batch is transactional; a
-failed file rolls back that batch. A successful invocation commits before the app
-is replaced. Image rollback never undoes committed SQL, initialization or user writes.
-
-The old app runs during migrations. New migrations must support that app during
-release and throughout the rollback window. Add fields first, migrate reads/writes
-and backfill in compatible releases, and remove old fields after the window ends.
-Keep applied migration files immutable. For schema/data changes test the previous
-image on the upgraded schema; readiness alone cannot prove business compatibility.
-Database backup restoration needs a separate, explicitly planned recovery operation.
+Local scripted tests and mocked Terraform validation do not demonstrate a cloud
+release. Before accepting A7, run the GitHub workflow against AWS, verify its
+recorded digests match the running containers, confirm HTTPS/login/REST/MCP
+checks, and exercise the changed failure/recovery path. Keep the resulting run
+and command records as acceptance evidence.

@@ -31,7 +31,7 @@ jobs:
       - run: terraform init -backend=false -input=false
       - run: terraform validate
       - run: terraform test
-      - run: bash -n scripts/setup-host.sh scripts/release.sh scripts/publish-images.sh
+      - run: bash -n scripts/setup-host.sh scripts/release.sh
       - run: python3 -m py_compile scripts/bootstrap.py scripts/create-config.py
 
   backend:

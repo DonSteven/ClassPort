@@ -5,37 +5,38 @@ permissions:
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    branches: [main]
+    tags: ['v*.*.*']
   workflow_dispatch:
     inputs:
       ref:
-        description: 'Git ref to deploy (tag, branch, or SHA). Defaults to origin/main.'
+        description: 'Commit, tag or branch on main history to deploy'
         required: false
-        default: 'origin/main'
+        default: main
 
 concurrency:
   group: deploy-prod
   cancel-in-progress: false
 
+env:
+  AWS_PAGER: ''
+
 jobs:
   resolve:
-    name: Resolve deployment commit
+    name: Resolve an allowed deployment commit
     runs-on: ubuntu-latest
     outputs:
       sha: ${{ steps.commit.outputs.sha }}
     steps:
-      - name: Select deployment ref
-        id: target
-        env:
-          DEPLOY_REF: ${{ inputs.ref || github.sha }}
-        run: echo "ref=${DEPLOY_REF#origin/}" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
-          ref: ${{ steps.target.outputs.ref }}
-      - name: Resolve commit SHA
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+      - name: Require a commit on main history
         id: commit
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        run: |
+          git merge-base --is-ancestor HEAD origin/main
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   checks:
     name: Pre-deploy checks
@@ -44,69 +45,14 @@ jobs:
     with:
       ref: ${{ needs.resolve.outputs.sha }}
 
-  images:
-    name: Build immutable release images
+  publish:
+    name: Publish and verify the exact ECR image pair
     needs: [resolve, checks]
     runs-on: ubuntu-latest
+    environment: production
     permissions:
       contents: read
-      packages: write
-    outputs:
-      backend: ${{ steps.names.outputs.backend }}@${{ steps.backend.outputs.digest }}
-      frontend: ${{ steps.names.outputs.frontend }}@${{ steps.frontend.outputs.digest }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.resolve.outputs.sha }}
-      - name: Require the public production origin
-        env:
-          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
-        run: '[[ "$PUBLIC_SITE_URL" == https://?* ]]'
-      - name: Image names
-        id: names
-        run: |
-          echo "backend=ghcr.io/${GITHUB_REPOSITORY,,}-backend" >> "$GITHUB_OUTPUT"
-          echo "frontend=ghcr.io/${GITHUB_REPOSITORY,,}-frontend" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Backend image
-        id: backend
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.names.outputs.backend }}:${{ needs.resolve.outputs.sha }}
-          labels: org.opencontainers.image.revision=${{ needs.resolve.outputs.sha }}
-      - name: Frontend image
-        id: frontend
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: web/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.names.outputs.frontend }}:${{ needs.resolve.outputs.sha }}
-          labels: org.opencontainers.image.revision=${{ needs.resolve.outputs.sha }}
-          build-args: |
-            VITE_API_BASE_URL=
-            VITE_SITE_URL=${{ vars.PUBLIC_SITE_URL }}
-            VITE_SITE_NAME=${{ vars.PUBLIC_SITE_NAME || 'ClassPort' }}
-            VITE_SHOW_LANDING=${{ vars.PUBLIC_SHOW_LANDING || 'false' }}
-            VITE_GOOGLE_SITE_VERIFICATION=${{ vars.PUBLIC_GOOGLE_SITE_VERIFICATION }}
-
-  verify:
-    name: Verify the exact image pair and package release
-    needs: [resolve, images]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -116,66 +62,114 @@ jobs:
           python-version: '3.12'
       - uses: astral-sh/setup-uv@v3
       - run: uv sync --frozen
-      - uses: docker/login-action@v4
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Smoke test the published digests with a disposable database
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: publish-${{ github.run_id }}-${{ github.run_attempt }}
+      - uses: docker/setup-buildx-action@v4
+      - name: Log in to the ECR registry
         env:
-          CLASSPORT_TEST_BACKEND_IMAGE: ${{ needs.images.outputs.backend }}
-          CLASSPORT_TEST_FRONTEND_IMAGE: ${{ needs.images.outputs.frontend }}
+          BACKEND_REPOSITORY: ${{ vars.BACKEND_REPOSITORY }}
         run: |
-          docker pull "$CLASSPORT_TEST_BACKEND_IMAGE"
-          docker pull "$CLASSPORT_TEST_FRONTEND_IMAGE"
-          uv run --no-sync pytest tests/test_release_images.py -q
-      - name: Package the verified release
+          set -euo pipefail
+          : "${BACKEND_REPOSITORY:?}"
+          aws ecr get-login-password | docker login --username AWS --password-stdin "${BACKEND_REPOSITORY%%/*}"
+      - name: Build missing SHA images and reuse existing immutable images
         env:
           RELEASE_COMMIT: ${{ needs.resolve.outputs.sha }}
-          BACKEND_IMAGE: ${{ needs.images.outputs.backend }}
-          FRONTEND_IMAGE: ${{ needs.images.outputs.frontend }}
+          BACKEND_REPOSITORY: ${{ vars.BACKEND_REPOSITORY }}
+          FRONTEND_REPOSITORY: ${{ vars.FRONTEND_REPOSITORY }}
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
+          PUBLIC_SITE_NAME: ${{ vars.PUBLIC_SITE_NAME }}
+          PUBLIC_SHOW_LANDING: ${{ vars.PUBLIC_SHOW_LANDING }}
+          PUBLIC_GOOGLE_SITE_VERIFICATION: ${{ vars.PUBLIC_GOOGLE_SITE_VERIFICATION }}
+        run: python scripts/publish_release.py
+      - name: Smoke test the published digests with a disposable database
+        env:
+          CLASSPORT_TEST_RELEASE_COMMIT: ${{ needs.resolve.outputs.sha }}
         run: |
-          mkdir release
-          printf 'RELEASE_COMMIT=%s\nBACKEND_IMAGE=%s\nFRONTEND_IMAGE=%s\n' \
-            "$RELEASE_COMMIT" "$BACKEND_IMAGE" "$FRONTEND_IMAGE" > release/release.env
-          cp docker-compose.prod.yml deploy-prod.sh release/
+          set -euo pipefail
+          source release/release.env
+          export CLASSPORT_TEST_BACKEND_IMAGE="$BACKEND_IMAGE"
+          export CLASSPORT_TEST_FRONTEND_IMAGE="$FRONTEND_IMAGE"
+          docker pull "$BACKEND_IMAGE"
+          docker pull "$FRONTEND_IMAGE"
+          uv run --no-sync pytest tests/test_release_images.py -q
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: production-release
           path: release/
-          if-no-files-found: error
+          if-no-files-found: ignore
           retention-days: 90
 
   deploy:
-    name: Deploy verified release to EC2
-    needs: [resolve, verify]
+    name: Deploy verified release and wait for SSM result
+    needs: [resolve, publish]
     runs-on: ubuntu-latest
     environment: production
+    permissions:
+      contents: read
+      id-token: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
       - uses: actions/download-artifact@v4
         with:
           name: production-release
           path: release
-      - name: Transfer bundle and deploy
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: deploy-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Execute release, wait and retain command and application results
         timeout-minutes: 15
         env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-          EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
-          RELEASE_ID: ${{ needs.resolve.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          AWS_INSTANCE_ID: ${{ vars.AWS_INSTANCE_ID }}
+        run: python3 scripts/deploy_via_ssm.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-deployment-result
+          path: release/
+          if-no-files-found: error
+          retention-days: 90
+
+  result:
+    name: Record pipeline outcome
+    if: always()
+    needs: [resolve, checks, publish, deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Save every stage outcome
+        env:
+          STAGES: ${{ toJSON(needs) }}
+          RELEASE_COMMIT: ${{ needs.resolve.outputs.sha }}
         run: |
-          set -euo pipefail
-          : "${EC2_HOST:?}" "${EC2_USER:?}" "${EC2_SSH_KEY:?}" "${EC2_KNOWN_HOSTS:?}"
-          key="$RUNNER_TEMP/ec2-key"
-          hosts="$RUNNER_TEMP/ec2-known-hosts"
-          trap 'rm -f "$key" "$hosts"' EXIT
-          umask 077
-          printf '%s\n' "$EC2_SSH_KEY" > "$key"
-          printf '%s\n' "$EC2_KNOWN_HOSTS" > "$hosts"
-          options=(-i "$key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$hosts")
-          target="$EC2_USER@$EC2_HOST"
-          incoming="/opt/classport/incoming/$RELEASE_ID"
-          ssh "${options[@]}" "$target" "mkdir -p '$incoming'"
-          scp "${options[@]}" release/* "$target:$incoming/"
-          ssh "${options[@]}" "$target" "bash '$incoming/deploy-prod.sh' '$incoming'"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          result = {"commit": os.environ["RELEASE_COMMIT"], "run_id": os.environ["GITHUB_RUN_ID"],
+                    "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"], "stages": json.loads(os.environ["STAGES"])}
+          Path("pipeline-result.json").write_text(json.dumps(result, indent=2) + "\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write("| Stage | Result |\n|---|---|\n")
+              for name, value in result["stages"].items():
+                  summary.write(f"| {name} | {value['result']} |\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-pipeline-result
+          path: pipeline-result.json
+          retention-days: 90
+      - name: Require all release stages to succeed
+        env:
+          STAGES: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          raise SystemExit(0 if all(stage["result"] == "success" for stage in json.loads(os.environ["STAGES"]).values()) else 1)
+          PY

@@ -31,19 +31,18 @@ def test_production_uses_only_pinned_images_and_keeps_credentials_separate(tmp_p
         cwd=tmp_path, env=env, capture_output=True, text=True, check=True,
     )
     services = json.loads(result.stdout)["services"]
-    assert set(services) == {"classport", "frontend", "migrate", "smoke"}
+    assert set(services) == {"classport", "frontend", "smoke"}
     assert all("build" not in service and "@sha256:" in service["image"] for service in services.values())
-    assert services["classport"]["image"] == services["migrate"]["image"] == services["smoke"]["image"]
+    assert services["classport"]["image"] == services["smoke"]["image"]
     runtime = services["classport"]["environment"]
     assert "MIGRATION_DATABASE_URL" not in runtime
     assert "SMOKE_PASSWORD" not in runtime and "SMOKE_MCP_TOKEN" not in runtime
-    assert "DATABASE_URL" not in services["migrate"]["environment"]
     assert "MIGRATION_DATABASE_URL" not in services["smoke"]["environment"]
     assert "ports" not in services["classport"]
     storage = next(v for v in services["classport"]["volumes"] if v["target"] == "/opt/courses")
     assert storage["type"] == "bind" and storage["source"] == str(tmp_path / "data/courses")
     assert storage.get("bind", {}).get("create_host_path", False) is False
-    for name in ("classport", "migrate"):
+    for name in ("classport",):
         assert any(v["target"] == "/etc/classport/certs" and v["read_only"] for v in services[name]["volumes"])
     result = subprocess.run([*command, "config", "--services"], cwd=tmp_path, env=env, capture_output=True, text=True, check=True)
     assert set(result.stdout.split()) == {"classport", "frontend"}

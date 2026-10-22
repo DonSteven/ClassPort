@@ -5,6 +5,8 @@ current application-level user isolation without RDS superuser or schema ownersh
 """
 from __future__ import annotations
 
+import argparse
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -123,49 +125,97 @@ def seed_smoke(migration_dsn, config):
         )
 
 
-def bootstrap(config, master, root):
-    validate_config(config)
+def bootstrap(config, master, root, result_path):
+    report = {"started_at": datetime.now(timezone.utc).isoformat(), "status": "running",
+              "steps": {name: "pending" for name in ("validation", "roles", "migration", "runtime_grants", "accounts", "configuration")}}
+
+    def save():
+        temporary = result_path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(report) + "\n")
+        temporary.replace(result_path)
+
+    def step(name, action):
+        report["steps"][name] = "running"
+        save()
+        try:
+            action()
+        except Exception:
+            report["steps"][name] = "failed"
+            report["status"] = "failed"
+            report["finished_at"] = datetime.now(timezone.utc).isoformat()
+            save()
+            raise
+        report["steps"][name] = "succeeded"
+        save()
+
+    save()
+    step("validation", lambda: validate_config(config))
     # All connections verify both the RDS certificate chain and endpoint hostname.
     tls = {"PGSSLMODE": "verify-full", "PGSSLROOTCERT": "/etc/classport/certs/global-bundle.pem", "PGCONNECT_TIMEOUT": "5"}
     os.environ.update(tls)
     admin_dsn = database_url(master["username"], master["password"])
     migration_dsn = database_url("classport_migrator", config["MIGRATION_DB_PASSWORD"])
-    provision_roles(admin_dsn, config)
+    step("roles", lambda: provision_roles(admin_dsn, config))
     maintenance = {
         **tls, "MIGRATION_DATABASE_URL": migration_dsn,
         "OPERATOR_EMAIL": config["OPERATOR_EMAIL"].strip().lower(),
         "OPERATOR_USER_ID": OPERATOR_ID, "OPERATOR_DISPLAY_NAME": "Operator",
         "APP_PASSWORD_HASH": PasswordHasher().hash(config["OPERATOR_PASSWORD"]),
     }
-    # Run the existing image's migrations/seed, with only maintenance credentials.
-    for script in ("run_migrations.py", "seed_operator_password.py"):
-        subprocess.run([sys.executable, f"/app/scripts/{script}"], env={**os.environ, **maintenance}, check=True)
-    grant_runtime_access(migration_dsn)
-    seed_smoke(migration_dsn, config)
-    write_env(root / ".env.migration", maintenance)
-    write_env(root / ".env", {
-        **tls, "DATABASE_URL": database_url("classport_app", config["APP_DB_PASSWORD"]),
-        "SESSION_SECRET": config["SESSION_SECRET"],
-        "SECRETS_ENCRYPTION_KEY": config["SECRETS_ENCRYPTION_KEY"],
-        "PUBLIC_URL": os.environ["PUBLIC_URL"], "CORS_ORIGINS": os.environ["PUBLIC_URL"],
-        "OPERATOR_EMAIL": maintenance["OPERATOR_EMAIL"], "OPERATOR_USER_ID": OPERATOR_ID,
-        "SIGNUPS_ENABLED": "false",
-    })
-    write_env(root / ".env.smoke", {
-        "SMOKE_BASE_URL": os.environ["PUBLIC_URL"], "SMOKE_EMAIL": config["SMOKE_EMAIL"].strip().lower(),
-        "SMOKE_PASSWORD": config["SMOKE_PASSWORD"], "SMOKE_MCP_TOKEN": config["SMOKE_MCP_TOKEN"],
-    })
+    def run_script(script):
+        # Failed SQL/connection exceptions can contain secrets. Only the stage
+        # outcome is exported; credentials live in this maintenance process.
+        subprocess.run([sys.executable, f"/app/scripts/{script}"],
+                       env={**os.environ, **maintenance}, capture_output=True, check=True)
+
+    step("migration", lambda: run_script("run_migrations.py"))
+    step("runtime_grants", lambda: grant_runtime_access(migration_dsn))
+
+    def accounts():
+        run_script("seed_operator_password.py")
+        seed_smoke(migration_dsn, config)
+
+    step("accounts", accounts)
+
+    def configuration():
+        write_env(root / ".env", {
+            **tls, "DATABASE_URL": database_url("classport_app", config["APP_DB_PASSWORD"]),
+            "SESSION_SECRET": config["SESSION_SECRET"],
+            "SECRETS_ENCRYPTION_KEY": config["SECRETS_ENCRYPTION_KEY"],
+            "PUBLIC_URL": os.environ["PUBLIC_URL"], "CORS_ORIGINS": os.environ["PUBLIC_URL"],
+            "OPERATOR_EMAIL": maintenance["OPERATOR_EMAIL"], "OPERATOR_USER_ID": OPERATOR_ID,
+            "SIGNUPS_ENABLED": "false",
+        })
+        write_env(root / ".env.smoke", {
+            "SMOKE_BASE_URL": os.environ["PUBLIC_URL"], "SMOKE_EMAIL": config["SMOKE_EMAIL"].strip().lower(),
+            "SMOKE_PASSWORD": config["SMOKE_PASSWORD"], "SMOKE_MCP_TOKEN": config["SMOKE_MCP_TOKEN"],
+        })
+        (root / ".env.migration").unlink(missing_ok=True)
+
+    step("configuration", configuration)
+    report.update(status="succeeded", finished_at=datetime.now(timezone.utc).isoformat())
+    save()
     print("AWS database identities, operator and release checks are ready.")
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--result-file", type=Path, required=True)
+    arguments = parser.parse_args()
     try:
         bootstrap(
             json.loads(Path("/run/secrets/application.json").read_text()),
             json.loads(Path("/run/secrets/database.json").read_text()),
             Path("/deployment"),
+            arguments.result_file,
         )
     except Exception:
+        if arguments.result_file.exists():
+            report = json.loads(arguments.result_file.read_text())
+            report.update(status="failed", finished_at=datetime.now(timezone.utc).isoformat())
+            temporary = arguments.result_file.with_suffix(".tmp")
+            temporary.write_text(json.dumps(report) + "\n")
+            temporary.replace(arguments.result_file)
         # Connection errors can include DSNs and SQL can include literal passwords.
         print("AWS bootstrap failed; secret values and exception bodies omitted.", file=sys.stderr)
         raise SystemExit(1) from None

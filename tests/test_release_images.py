@@ -1,6 +1,7 @@
 """Run the published image pair against a disposable database before deployment.
 
-Opt in with CLASSPORT_TEST_BACKEND_IMAGE and CLASSPORT_TEST_FRONTEND_IMAGE.
+Opt in with CLASSPORT_TEST_BACKEND_IMAGE, CLASSPORT_TEST_FRONTEND_IMAGE and
+CLASSPORT_TEST_RELEASE_COMMIT.
 The deployment workflow supplies the exact registry digests, without rebuilding.
 """
 import os
@@ -22,6 +23,18 @@ pytestmark = pytest.mark.skipif(not BACKEND or not FRONTEND, reason="release ima
 
 
 def test_release_images_serve_login_api_and_mcp():
+    expected_commit = os.environ["CLASSPORT_TEST_RELEASE_COMMIT"]
+    for image in (BACKEND, FRONTEND):
+        revision = subprocess.check_output(
+            ["docker", "image", "inspect", "--format", '{{index .Config.Labels "org.opencontainers.image.revision"}}', image],
+            text=True,
+        ).strip()
+        assert revision == expected_commit
+    subprocess.run(
+        ["docker", "run", "--rm", "--entrypoint", "sh", BACKEND, "-ec",
+         "test -f /app/release/docker-compose.prod.yml && test -f /app/release/deploy-prod.sh && test -f /app/release/bootstrap.py"],
+        check=True,
+    )
     password = "disposable-image-check-password"
     token = "disposable-image-check-mcp-token"
     user_id = "00000000-0000-0000-0000-000000000001"

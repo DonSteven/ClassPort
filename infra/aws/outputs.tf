@@ -33,3 +33,8 @@ output "data_volume_id" {
 output "log_group" {
   value = aws_cloudwatch_log_group.containers.name
 }
+
+output "github_deploy_role_arn" {
+  description = "GitHub Actions AWS_DEPLOY_ROLE_ARN variable; null until OIDC is configured."
+  value       = try(aws_iam_role.github[0].arn, null)
+}

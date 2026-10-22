@@ -49,3 +49,66 @@ resource "aws_iam_role_policy" "app" {
     ]
   })
 }
+
+resource "aws_iam_openid_connect_provider" "github" {
+  count          = var.github_oidc_subject != null && var.github_oidc_provider_arn == null ? 1 : 0
+  url            = "https://token.actions.githubusercontent.com"
+  client_id_list = ["sts.amazonaws.com"]
+}
+
+resource "aws_iam_role" "github" {
+  count = var.github_oidc_subject != null ? 1 : 0
+  name  = "${var.name}-github-deploy"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = "sts:AssumeRoleWithWebIdentity"
+      Principal = {
+        Federated = var.github_oidc_provider_arn != null ? var.github_oidc_provider_arn : aws_iam_openid_connect_provider.github[0].arn
+      }
+      Condition = {
+        StringEquals = {
+          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+          "token.actions.githubusercontent.com:sub" = var.github_oidc_subject
+        }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "github" {
+  count = var.github_oidc_subject != null ? 1 : 0
+  name  = "${var.name}-publish-and-deploy"
+  role  = aws_iam_role.github[0].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "ECRLogin", Effect = "Allow"
+        Action = ["ecr:GetAuthorizationToken"], Resource = "*"
+      },
+      {
+        Sid = "ReleaseImages", Effect = "Allow"
+        Action = [
+          "ecr:DescribeImages", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchCheckLayerAvailability", "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:PutImage"
+        ]
+        Resource = [for repository in aws_ecr_repository.images : repository.arn]
+      },
+      {
+        Sid    = "DeployInstance", Effect = "Allow"
+        Action = ["ssm:SendCommand"]
+        Resource = [
+          "arn:${local.partition}:ssm:${var.aws_region}::document/AWS-RunShellScript",
+          "arn:${local.partition}:ec2:${var.aws_region}:${local.account}:instance/${aws_instance.app.id}"
+        ]
+      },
+      {
+        Sid    = "ReadCommandResult", Effect = "Allow"
+        Action = ["ssm:GetCommandInvocation"], Resource = "*"
+      }
+    ]
+  })
+}

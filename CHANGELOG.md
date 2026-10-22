@@ -6,6 +6,15 @@ versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### 2026-10-22
+
+#### Added
+
+- **GitHub-to-AWS delivery.** Publish or reuse commit-tagged ECR images,
+  verify the image pair, and deploy through SSM using short-lived GitHub OIDC
+  credentials. Bootstrap roles and migrations in a maintenance container, retain
+  structured deployment results, and restore the previous release on failure.
+
 ### 2026-10-21
 
 #### Added

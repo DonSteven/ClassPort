@@ -59,3 +59,23 @@ variable "deletion_protection" {
   type        = bool
   default     = true
 }
+
+variable "github_oidc_subject" {
+  description = "Exact GitHub OIDC sub for this repository's production environment, including immutable IDs when enabled. Null disables GitHub deployment access."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.github_oidc_subject == null || can(regex("^repo:[^:*]+/[^:*]+:environment:production$", var.github_oidc_subject))
+    error_message = "Use the exact repo:OWNER/REPOSITORY:environment:production subject; wildcards are forbidden."
+  }
+}
+
+variable "github_oidc_provider_arn" {
+  description = "Existing account-wide GitHub OIDC provider ARN. Leave null to create it when github_oidc_subject is configured."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.github_oidc_provider_arn == null || can(regex("^arn:aws[^:]*:iam::[0-9]{12}:oidc-provider/token\\.actions\\.githubusercontent\\.com$", var.github_oidc_provider_arn))
+    error_message = "Provide the GitHub OIDC provider ARN or null."
+  }
+}

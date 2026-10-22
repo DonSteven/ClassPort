@@ -57,12 +57,9 @@ locals {
     "", # trailing newline
   ])
   cloud_init = templatefile("${path.module}/cloud-init.yaml", {
-    host_env  = base64encode(local.host_env)
-    setup     = base64encode(file("${path.module}/scripts/setup-host.sh"))
-    release   = base64encode(file("${path.module}/scripts/release.sh"))
-    bootstrap = base64encode(file("${path.module}/scripts/bootstrap.py"))
-    compose   = base64encode(file("${path.module}/../../docker-compose.prod.yml"))
-    deploy    = base64encode(file("${path.module}/../../deploy-prod.sh"))
+    host_env = base64encode(local.host_env)
+    setup    = base64encode(file("${path.module}/scripts/setup-host.sh"))
+    release  = base64encode(file("${path.module}/scripts/release.sh"))
     docker_config = base64encode(jsonencode({
       "log-driver" = "awslogs"
       "log-opts" = {

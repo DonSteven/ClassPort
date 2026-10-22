@@ -20,17 +20,5 @@ write_files:
     permissions: '0700'
     encoding: b64
     content: ${release}
-  - path: /opt/classport/aws/bootstrap.py
-    permissions: '0600'
-    encoding: b64
-    content: ${bootstrap}
-  - path: /opt/classport/aws/docker-compose.prod.yml
-    permissions: '0600'
-    encoding: b64
-    content: ${compose}
-  - path: /opt/classport/aws/deploy-prod.sh
-    permissions: '0700'
-    encoding: b64
-    content: ${deploy}
 runcmd:
   - [bash, /usr/local/sbin/classport-setup]

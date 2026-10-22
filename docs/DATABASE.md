@@ -4,6 +4,10 @@ The REST API and MCP tools share the runtime database pool. SQL migrations and
 operator initialization use a separate maintenance connection. Within an
 environment, both identities point to the same database, with different roles.
 
+The env-file examples below cover local Docker and standalone maintenance.
+AWS production obtains maintenance credentials temporarily inside its release
+container and retains no `.env.migration`; see [Production delivery](PRODUCTION.md).
+
 ## Initial schema
 
 `migrations/00000000000000_baseline.sql` creates the initial multi-user
