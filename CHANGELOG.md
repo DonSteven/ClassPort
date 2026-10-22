@@ -15,6 +15,10 @@ versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
   production Compose configuration, and retain persistent course storage.
   Serialize migrations, verify readiness plus login/REST/MCP access, and record
   paired releases for automatic recovery and manual rollback.
+- **AWS infrastructure.** Add Terraform for an EC2 host, persistent
+  encrypted EBS storage, private PostgreSQL RDS, immutable ECR repositories, a
+  versioned backup bucket, Secrets Manager and CloudWatch. Configure Caddy HTTPS
+  and Systems Manager administration without opening SSH.
 
 ### 2026-10-20
 

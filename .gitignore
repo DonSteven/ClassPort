@@ -11,6 +11,14 @@ web/dist/
 *.tsbuildinfo
 
 # env
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+terraform.tfvars
+*.auto.tfvars
+infra/aws/application-secret.json
+crash.log
 .env
 .env.local
 .env.production

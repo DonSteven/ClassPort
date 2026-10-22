@@ -14,6 +14,26 @@ on:
         default: ''
 
 jobs:
+  infrastructure:
+    name: AWS infrastructure (offline validation)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/aws
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.5
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+      - run: terraform test
+      - run: bash -n scripts/setup-host.sh scripts/release.sh scripts/publish-images.sh
+      - run: python3 -m py_compile scripts/bootstrap.py scripts/create-config.py
+
   backend:
     name: Backend (ruff + pytest + docker build)
     runs-on: ubuntu-latest

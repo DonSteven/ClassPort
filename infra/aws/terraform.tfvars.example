@@ -1,0 +1,11 @@
+aws_region  = "us-east-1"
+name        = "classport-prod"
+# Both are optional. Leave domain_name unset until you own the domain and are
+# ready to configure its Cloudflare A record. No certificate is requested while
+# domain_name is null, and the host refuses application releases until configured.
+# domain_name = "study.<your-domain>" # Replace with your real lowercase hostname.
+# acme_email  = "<your-acme-account-email>"
+
+# Defaults: t3.small EC2, 30 GiB gp3 data disk, db.t4g.micro PostgreSQL 16,
+# single AZ, 7 days of RDS backups, 14 days of container logs, no NAT gateway.
+# Never put credentials or secret values in this file.

@@ -1,5 +1,10 @@
 # EC2 / RDS releases
 
+For a fresh AWS account/environment, use the [Terraform AWS deployment](../infra/aws/README.md).
+It provisions the host, private RDS, ECR, persistent storage, secrets and HTTPS,
+including first-install database/account setup and an ECR/SSM release entrypoint.
+The manual setup and GHCR workflow below remain available for existing hosts.
+
 The local `deploy.sh` and `docker-compose.yml` retain their existing behavior.
 Cloud releases use `deploy-prod.sh` and the standalone `docker-compose.prod.yml`.
 EC2 downloads the CI-built images; it never builds source code or installs Node,
