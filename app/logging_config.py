@@ -12,7 +12,8 @@ from uuid import uuid4
 
 
 request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
-FIELDS = {"event", "stage", "method", "path", "status", "duration_ms", "error_type", "indexed", "skipped", "failed", "pruned", "total_seen", "user_id", "file_id", "version_id", "error_code"}
+job_context: ContextVar[dict] = ContextVar("job_context", default={})
+FIELDS = {"event", "stage", "method", "path", "status", "duration_ms", "error_type", "indexed", "skipped", "failed", "pruned", "total_seen", "user_id", "file_id", "version_id", "error_code", "job_id", "attempt", "execution_id", "worker_id"}
 log = logging.getLogger("app.operations")
 
 
@@ -24,6 +25,7 @@ class JsonFormatter(logging.Formatter):
                 "level": record.levelname, "logger": record.name,
                 "request_id": request_id.get(), "event": "log.message"}
         data.update({key: record.__dict__[key] for key in FIELDS if key in record.__dict__})
+        data.update(job_context.get())
         if record.exc_info and record.exc_info[0]:
             data["error_type"] = record.exc_info[0].__name__
             data["trace"] = [{"file": Path(frame.filename).name, "line": frame.lineno,

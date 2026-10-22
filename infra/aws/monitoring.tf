@@ -16,6 +16,10 @@ resource "aws_cloudwatch_metric_alarm" "operations" {
     disk_full       = { metric = "DiskUsedPercent", comparison = "GreaterThanThreshold", threshold = 85 }
     backup_overdue  = { metric = "BackupAgeSeconds", comparison = "GreaterThanThreshold", threshold = 93600 }
     backup_failed   = { metric = "BackupFailed", comparison = "GreaterThanThreshold", threshold = 0 }
+    jobs_waiting    = { metric = "JobWaitingAgeSeconds", comparison = "GreaterThanThreshold", threshold = 300 }
+    dispatch_stuck  = { metric = "JobOutboxAgeSeconds", comparison = "GreaterThanThreshold", threshold = 120 }
+    recovery_stuck  = { metric = "JobExpiredLeases", comparison = "GreaterThanThreshold", threshold = 0 }
+    jobs_unobserved = { metric = "JobMetricsReady", comparison = "LessThanThreshold", threshold = 1 }
   }
   alarm_name          = "${var.name}-${each.key}"
   namespace           = "ClassPort/Operations"

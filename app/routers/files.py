@@ -65,6 +65,12 @@ async def create_folder(body: dict = Body(...), user: User = Depends(require_use
     return await intent.create_folder(user.id, path)
 
 
+@router.post("/{file_id}/versions/{version_id}/complete")
+async def complete_upload(file_id: UUID, version_id: UUID,
+                          user: User = Depends(require_user)) -> dict:
+    return await intent.complete_upload(user.id, file_id, version_id)
+
+
 @router.post("/move")
 async def move(body: dict = Body(...), user: User = Depends(require_user)) -> dict:
     source = _safe_key(body.get("from") or "")

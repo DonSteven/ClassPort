@@ -12,6 +12,7 @@ import pytest_asyncio
 from app import db
 from app.services import file_index as index
 from app.services import file_records as files
+from app.services import jobs
 from app.storage.local import LocalStorage
 from tests.services.test_file_index import make_pdf
 
@@ -107,6 +108,36 @@ async def test_submission_waits_for_file_lock_then_rechecks(committed_user, paus
         await deleting.commit()
     assert (await asyncio.wait_for(task, 5))["status"] == "discarded"
     assert await db.fetchval("SELECT count(*) FROM file_index WHERE user_id = %s", committed_user) == 0
+
+
+async def test_lease_expiring_during_index_write_rolls_back_the_entire_result(committed_user, pg_url, tmp_path, monkeypatch):
+    monkeypatch.setenv("STUDY_ROOT", str(tmp_path))
+    monkeypatch.setattr(jobs, "LEASE_SECONDS", 5)
+    first = await files.upload(committed_user, "notes.txt", b"old text")
+    await index.index_file(committed_user, first["file_id"], first["version_id"])
+    newer = await files.upload(committed_user, "notes.txt", b"quantum mechanics")
+    async with await psycopg.AsyncConnection.connect(pg_url) as locked:
+        await locked.execute("SELECT file_id FROM file_index WHERE file_id=%s FOR UPDATE", (first["file_id"],))
+        task = asyncio.create_task(jobs.run(newer["job_id"], "worker"))
+        try:
+            async with await psycopg.AsyncConnection.connect(pg_url, autocommit=True) as observer:
+                async with asyncio.timeout(5):
+                    while True:
+                        blocked = await (await observer.execute(
+                            "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE %s = ANY(pg_blocking_pids(pid)))",
+                            (locked.info.backend_pid,),
+                        )).fetchone()
+                        if blocked[0]:
+                            break
+                        assert not task.done()
+                        await asyncio.sleep(0.05)
+            await asyncio.sleep(5.1)
+        finally:
+            await locked.commit()
+            await asyncio.wait_for(task, 5)
+    assert await db.fetchval("SELECT file_version_id FROM file_index WHERE file_id=%s", first["file_id"]) == first["version_id"]
+    assert (await jobs.get(committed_user, newer["job_id"]))["status"] == "running"
+    assert await index.search(committed_user, "quantum") == []
 
 
 async def test_storage_read_does_not_hold_connection(committed_user, tmp_path, monkeypatch):

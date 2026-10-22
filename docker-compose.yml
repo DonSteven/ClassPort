@@ -66,6 +66,70 @@ services:
       start_period: 30s
     networks: [internal]
 
+  redis:
+    image: redis:7.4-alpine@sha256:57e4255cc971b1c8d6f8a6ca283ac01bc3ecdd914273ef6bfaede87aaecd6541
+    restart: unless-stopped
+    command: [redis-server, --appendonly, "yes", --appendfsync, everysec]
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+    networks: [internal]
+
+  worker:
+    image: classport:latest
+    restart: unless-stopped
+    command: [uv, run, --no-sync, celery, -A, "app.celery_app:celery", worker, --pool=prefork, "--concurrency=${WORKER_CONCURRENCY:-1}"]
+    env_file:
+      - path: .env
+        format: raw
+    environment:
+      STUDY_ROOT: /opt/courses
+      CELERY_BROKER_URL: redis://redis:6379/0
+      DB_POOL_MIN_SIZE: "1"
+      DB_POOL_MAX_SIZE: "2"
+    volumes:
+      - /opt/courses:/opt/courses:ro
+      - ./certs:/etc/classport/certs:ro
+    stop_grace_period: 150s
+    mem_limit: 512m
+    cpus: "1.0"
+    healthcheck:
+      test: [CMD-SHELL, "uv run --no-sync celery -A app.celery_app:celery inspect ping -d celery@$$HOSTNAME --timeout 3"]
+      interval: 15s
+      timeout: 8s
+      retries: 4
+      start_period: 15s
+    networks: [internal]
+
+  dispatcher: &coordinator
+    image: classport:latest
+    restart: unless-stopped
+    command: [uv, run, --no-sync, python, -m, app.job_coordination, dispatch]
+    env_file:
+      - path: .env.coordinator
+        format: raw
+        required: false
+    volumes:
+      - ./certs:/etc/classport/certs:ro
+    healthcheck:
+      test: [CMD, python, -c, "import pathlib,time; assert time.time()-pathlib.Path('/tmp/classport-dispatch.heartbeat').stat().st_mtime < 30"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks: [internal]
+
+  job-recovery:
+    <<: *coordinator
+    command: [uv, run, --no-sync, python, -m, app.job_coordination, recover]
+    healthcheck:
+      test: [CMD, python, -c, "import pathlib,time; assert time.time()-pathlib.Path('/tmp/classport-recover.heartbeat').stat().st_mtime < 30"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
   migrate:
     profiles: [maintenance]
     image: classport:latest
@@ -128,3 +192,6 @@ services:
 networks:
   internal:
     driver: bridge
+
+volumes:
+  redis-data:

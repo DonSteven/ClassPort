@@ -17,6 +17,7 @@ def test_production_uses_only_pinned_images_and_keeps_credentials_separate(tmp_p
     shutil.copy(root / ".env.release.example", snapshot / "release.env")
     (tmp_path / ".env").write_text("DATABASE_URL=postgresql://app:runtime@rds/study\nSESSION_SECRET=test\n")
     (tmp_path / ".env.migration").write_text("MIGRATION_DATABASE_URL=postgresql://admin:maintenance@rds/study\n")
+    (tmp_path / ".env.coordinator").write_text("DATABASE_URL=postgresql://coordinator:control@rds/study\n")
     (tmp_path / ".env.smoke").write_text("SMOKE_PASSWORD=smoke-secret\nSMOKE_MCP_TOKEN=smoke-token\n")
     # An accidental local override must have no effect on the explicit file.
     (tmp_path / "docker-compose.override.yml").write_text("services:\n  postgres:\n    image: postgres:16-alpine\n")
@@ -31,18 +32,25 @@ def test_production_uses_only_pinned_images_and_keeps_credentials_separate(tmp_p
         cwd=tmp_path, env=env, capture_output=True, text=True, check=True,
     )
     services = json.loads(result.stdout)["services"]
-    assert set(services) == {"classport", "frontend", "smoke"}
+    assert set(services) == {"classport", "frontend", "smoke", "redis", "worker", "dispatcher", "job-recovery"}
     assert all("build" not in service and "@sha256:" in service["image"] for service in services.values())
     assert services["classport"]["image"] == services["smoke"]["image"]
     runtime = services["classport"]["environment"]
     assert "MIGRATION_DATABASE_URL" not in runtime
     assert "SMOKE_PASSWORD" not in runtime and "SMOKE_MCP_TOKEN" not in runtime
     assert "MIGRATION_DATABASE_URL" not in services["smoke"]["environment"]
-    assert "ports" not in services["classport"]
+    assert all("ports" not in services[name] for name in ("classport", "worker", "dispatcher", "job-recovery", "redis"))
+    for name in ("worker", "dispatcher", "job-recovery"):
+        assert services[name]["image"] == services["classport"]["image"]
+        assert "MIGRATION_DATABASE_URL" not in services[name]["environment"]
+    for name in ("dispatcher", "job-recovery"):
+        assert services[name]["environment"]["DATABASE_URL"].startswith("postgresql://coordinator:")
+        assert "SESSION_SECRET" not in services[name]["environment"]
+        assert not any(v["target"] == "/opt/courses" for v in services[name]["volumes"])
     storage = next(v for v in services["classport"]["volumes"] if v["target"] == "/opt/courses")
     assert storage["type"] == "bind" and storage["source"] == str(tmp_path / "data/courses")
     assert storage.get("bind", {}).get("create_host_path", False) is False
     for name in ("classport",):
         assert any(v["target"] == "/etc/classport/certs" and v["read_only"] for v in services[name]["volumes"])
     result = subprocess.run([*command, "config", "--services"], cwd=tmp_path, env=env, capture_output=True, text=True, check=True)
-    assert set(result.stdout.split()) == {"classport", "frontend"}
+    assert set(result.stdout.split()) == {"classport", "frontend", "redis", "worker", "dispatcher", "job-recovery"}

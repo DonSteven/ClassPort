@@ -229,5 +229,8 @@ Current versions stay nullable for directories and initial uploads.
 
 Version bytes are immutable through B2. B3 publishes in a short transaction
 after locking and rechecking the file's current version and deletion state;
-storage reads and parsing hold no connection. Persistent execution, retry and
-outbox dispatch are connected in B4/B5.
+storage reads and parsing hold no connection. Worker publication also checks the
+current execution and lease, committing the index and job/attempt success together.
+`20261022000003_job_request_id.sql` preserves the originating request ID for
+cross-process logs. Task execution, restricted coordinator grants and configuration
+are described in [WORKERS.md](WORKERS.md).

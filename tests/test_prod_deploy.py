@@ -28,7 +28,7 @@ def _bundle(path, number):
 def host(tmp_path):
     root = tmp_path / "host"
     root.mkdir()
-    for name in (".env", ".env.smoke"):
+    for name in (".env", ".env.smoke", ".env.coordinator"):
         (root / name).touch()
     (root / "certs").mkdir()
     (root / "certs/global-bundle.pem").touch()
@@ -49,6 +49,7 @@ def host(tmp_path):
         "with open(os.environ['TEST_COMMANDS'], 'a') as log:\n"
         "    log.write(json.dumps({'args': args, 'backend': image, "
         "'frontend': os.environ.get('FRONTEND_IMAGE')}) + '\\n')\n"
+        "if 'config' in args and '--services' in args: print('classport\\nfrontend\\nredis\\nworker\\ndispatcher\\njob-recovery'); sys.exit(0)\n"
         "if 'ps' in args: print(args[-1]); sys.exit(0)\n"
         "if args[0] == 'inspect':\n"
         "    if image.endswith('3' * 64) and os.environ.get('TEST_FAIL_STAGE') == 'images': print('wrong-image'); sys.exit(0)\n"
@@ -107,7 +108,9 @@ def test_production_deploy_records_a_verified_pair_after_database_preparation(ho
     assert pull < up < smoke
     assert not any("migrate" in a or "scripts/seed_operator_password.py" in a for a in args)
     assert "--no-build" in args[up]
-    assert args[up][-2:] == ["classport", "frontend"]
+    assert "--remove-orphans" in args[up]
+    assert any("stop" in a and a[-1] == "worker" for a in args)
+    assert any(a[0] == "inspect" and a[-1] == "worker" for a in args)
     assert all("build" not in a and "postgres" not in a for a in args)
     assert all("--project-directory" in a and "-f" in a for a in args if a[0] == "compose")
     report = json.loads((current / "application-result.json").read_text())

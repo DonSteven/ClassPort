@@ -25,6 +25,7 @@ SMOKE_ID = "00000000-0000-0000-0000-000000000002"
 REQUIRED_KEYS = {
     "OPERATOR_EMAIL", "OPERATOR_PASSWORD", "SMOKE_EMAIL", "SMOKE_PASSWORD",
     "SMOKE_MCP_TOKEN", "APP_DB_PASSWORD", "MIGRATION_DB_PASSWORD",
+    "COORDINATOR_DB_PASSWORD",
     "SESSION_SECRET", "SECRETS_ENCRYPTION_KEY",
 }
 
@@ -37,8 +38,8 @@ def validate_config(config):
         raise ValueError("Invalid application secret keys/values")
     if config["OPERATOR_EMAIL"].strip().lower() == config["SMOKE_EMAIL"].strip().lower():
         raise ValueError("The release check account must be separate from the operator")
-    if config["APP_DB_PASSWORD"] == config["MIGRATION_DB_PASSWORD"]:
-        raise ValueError("Runtime and migration database passwords must differ")
+    if len({config[key] for key in ("APP_DB_PASSWORD", "MIGRATION_DB_PASSWORD", "COORDINATOR_DB_PASSWORD")}) != 3:
+        raise ValueError("Runtime, migration and coordinator database passwords must differ")
     Fernet(config["SECRETS_ENCRYPTION_KEY"].encode())
 
 
@@ -62,6 +63,7 @@ def provision_roles(admin_dsn, config):
         for role, password in (
             ("classport_migrator", config["MIGRATION_DB_PASSWORD"]),
             ("classport_app", config["APP_DB_PASSWORD"]),
+            ("classport_jobs", config["COORDINATOR_DB_PASSWORD"]),
         ):
             if not conn.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,)).fetchone():
                 conn.execute(sql.SQL("CREATE ROLE {} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE").format(sql.Identifier(role)))
@@ -73,6 +75,7 @@ def provision_roles(admin_dsn, config):
         conn.execute(sql.SQL("REVOKE ALL ON DATABASE {} FROM PUBLIC").format(db))
         conn.execute(sql.SQL("GRANT CONNECT, CREATE ON DATABASE {} TO classport_migrator").format(db))
         conn.execute(sql.SQL("GRANT CONNECT ON DATABASE {} TO classport_app").format(db))
+        conn.execute(sql.SQL("GRANT CONNECT ON DATABASE {} TO classport_jobs").format(db))
         conn.execute("REVOKE CREATE ON SCHEMA public FROM PUBLIC")
         conn.execute("ALTER SCHEMA public OWNER TO classport_migrator")
 
@@ -82,6 +85,8 @@ def grant_runtime_access(migration_dsn):
         conn.execute("GRANT USAGE ON SCHEMA public TO classport_app")
         conn.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO classport_app")
         conn.execute("REVOKE ALL ON public._migrations FROM classport_app")
+        conn.execute("GRANT USAGE ON SCHEMA public TO classport_jobs")
+        conn.execute("GRANT SELECT, INSERT, UPDATE ON public.jobs, public.job_attempts, public.outbox TO classport_jobs")
         conn.execute("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO classport_app")
         conn.execute(
             "ALTER DEFAULT PRIVILEGES IN SCHEMA public "
@@ -138,6 +143,11 @@ def configure_runtime(config, root):
     write_env(root / ".env.smoke", {
         "SMOKE_BASE_URL": os.environ["PUBLIC_URL"], "SMOKE_EMAIL": config["SMOKE_EMAIL"].strip().lower(),
         "SMOKE_PASSWORD": config["SMOKE_PASSWORD"], "SMOKE_MCP_TOKEN": config["SMOKE_MCP_TOKEN"],
+    })
+    write_env(root / ".env.coordinator", {
+        **tls, "DATABASE_URL": database_url("classport_jobs", config["COORDINATOR_DB_PASSWORD"]),
+        "DB_POOL_MIN_SIZE": "1", "DB_POOL_MAX_SIZE": "2",
+        "CELERY_BROKER_URL": "redis://redis:6379/0",
     })
     (root / ".env.migration").unlink(missing_ok=True)
 

@@ -179,7 +179,10 @@ run "operations_and_recovery_are_scoped" {
   }
   assert {
     condition = (
-      length(aws_cloudwatch_metric_alarm.operations) == 4 &&
+      length(aws_cloudwatch_metric_alarm.operations) == 8 &&
+      aws_cloudwatch_metric_alarm.operations["jobs_waiting"].threshold == 300 &&
+      aws_cloudwatch_metric_alarm.operations["dispatch_stuck"].metric_name == "JobOutboxAgeSeconds" &&
+      aws_cloudwatch_metric_alarm.operations["recovery_stuck"].metric_name == "JobExpiredLeases" &&
       aws_cloudwatch_metric_alarm.operations["backup_overdue"].threshold == 93600 &&
       aws_cloudwatch_metric_alarm.operations["api_unavailable"].treat_missing_data == "breaching" &&
       aws_sns_topic_subscription.operations_email[0].protocol == "email" &&

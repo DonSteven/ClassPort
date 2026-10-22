@@ -217,7 +217,40 @@
     "uploadFailed": "上传失败：{{name}} — {{msg}}",
     "folderFailed": "创建文件夹失败：{{msg}}",
     "renameFailed": "重命名失败：{{msg}}",
-    "deleteFailed": "删除失败：{{msg}}"
+    "deleteFailed": "删除失败：{{msg}}",
+    "searchable": "可搜索",
+    "notIndexed": "尚未索引",
+    "retryProcessing": "重新处理",
+    "retryQueued": "已重新加入处理队列",
+    "uploadStates": {
+      "waiting": "等待上传",
+      "uploading": "上传中",
+      "uploaded": "上传完成",
+      "failed": "上传失败",
+      "incomplete": "上传未完成"
+    },
+    "processingStates": {
+      "queued": "等待处理",
+      "running": "处理中",
+      "retry_wait": "等待重试",
+      "succeeded": "处理完成",
+      "failed": "处理失败",
+      "cancelled": "已取消"
+    },
+    "processingErrors": {
+      "invalid_pdf": "无法读取该 PDF",
+      "encrypted_pdf": "该 PDF 需要密码",
+      "invalid_notebook": "无法读取该笔记本",
+      "unsupported_format": "此文件格式不支持内容搜索",
+      "content_missing": "文件内容缺失",
+      "storage_unavailable": "文件存储暂时不可用",
+      "database_unavailable": "数据库暂时不可用",
+      "worker_lost": "处理已中断",
+      "version_changed": "已有更新版本",
+      "file_deleted": "文件已删除",
+      "unsupported_pipeline": "需要兼容的后台处理进程",
+      "processing_error": "文件处理失败"
+    }
   },
   "activity": {
     "title": "活动记录",

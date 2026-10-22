@@ -58,21 +58,21 @@ async def test_real_export_restores_login_business_data_pdf_and_mcp(tmp_path, mo
             pdf.new_page().insert_text((72, 72), "Recovery drill PDF")
             original_bytes = pdf.tobytes()
         from app import db
-        from app.services import file_index, file_records
+        from app.services import file_records, jobs
         monkeypatch.setenv("STUDY_ROOT", str(materials))
         monkeypatch.setattr(db, "_pool", None)
         await db.init_pool(dsn(source, "classport_app", config["APP_DB_PASSWORD"]))
         try:
             await file_records.create_folder(bootstrap.OPERATOR_ID, "DRILL/empty")
             version = await file_records.upload(bootstrap.OPERATOR_ID, "DRILL/sample.pdf", original_bytes)
-            assert (await file_index.index_file(
-                bootstrap.OPERATOR_ID, version["file_id"], version["version_id"],
-            ))["status"] == "indexed"
+            await jobs.run(version["job_id"], "backup-worker")
+            interrupted = await file_records.upload(bootstrap.OPERATOR_ID, "DRILL/pending.txt", b"Recovered background job")
+            await jobs.claim(interrupted["job_id"], "old-host-worker")
         finally:
             await db.close_pool()
         with psycopg.connect(source_url) as conn:
             original_state = conn.execute(recovery.STATE_SQL).fetchone()[0]
-        assert original_state["file_versions"] == 1
+        assert original_state["file_versions"] == 2
         assert original_state["references"][0].startswith("objects/")
         files = recovery.check_files(materials, original_state)
         with tarfile.open(tmp_path / "courses.tar.gz", "w:gz") as archive:
@@ -113,6 +113,12 @@ async def test_real_export_restores_login_business_data_pdf_and_mcp(tmp_path, mo
         monkeypatch.setattr(db, "_pool", None)
         await db.init_pool()
         try:
+            from app.job_coordination import recover_once
+            assert (await recover_once(restored=True))["expired"] == 1
+            await db.execute("UPDATE jobs SET next_run_at=clock_timestamp() WHERE id=%s", interrupted["job_id"])
+            await jobs.run(interrupted["job_id"], "restored-host-worker")
+            recovered_job = await jobs.get(bootstrap.OPERATOR_ID, interrupted["job_id"])
+            assert recovered_job["status"] == "succeeded" and recovered_job["attempt_count"] == 2
             async with AsyncClient(transport=ASGITransport(create_app()), base_url="https://test") as client:
                 login = await client.post("/api/auth/login", json={"email": config["OPERATOR_EMAIL"], "password": config["OPERATOR_PASSWORD"]})
                 assert login.status_code == 200 and login.json()["authed"] is True

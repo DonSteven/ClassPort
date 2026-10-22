@@ -4,7 +4,7 @@ from uuid import UUID
 
 import pytest
 
-from app.services import file_index
+from app.services import jobs
 from scripts.index_files import parse_args
 
 
@@ -14,8 +14,8 @@ USER = UUID("00000000-0000-0000-0000-000000000001")
 @pytest.mark.parametrize("route", ["index-files", "sync"])
 async def test_internal_rebuild_requires_and_forwards_user(client, monkeypatch, route):
     monkeypatch.setenv("INTERNAL_API_SECRET", "test-secret")
-    rebuild = AsyncMock(return_value={"indexed": 1, "failed": 0})
-    monkeypatch.setattr(file_index, "index_user", rebuild)
+    rebuild = AsyncMock(return_value={"job_ids": [], "queued": 0, "total_seen": 0})
+    monkeypatch.setattr(jobs, "enqueue_user", rebuild)
     headers = {"X-Internal-Secret": "test-secret"}
     assert (await client.post(f"/api/internal/{route}", headers=headers)).status_code == 422
     rebuild.assert_not_awaited()

@@ -5,8 +5,12 @@ CLASSPORT_TEST_RELEASE_COMMIT.
 The deployment workflow supplies the exact registry digests, without rebuilding.
 """
 import os
+from contextlib import ExitStack
 import subprocess
 import time
+from uuid import uuid4
+
+import docker
 
 from argon2 import PasswordHasher
 import httpx
@@ -38,7 +42,9 @@ def test_release_images_serve_login_api_and_mcp():
     password = "disposable-image-check-password"
     token = "disposable-image-check-mcp-token"
     user_id = "00000000-0000-0000-0000-000000000001"
-    with Network() as network:
+    with Network() as network, ExitStack() as background:
+        volume = docker.from_env().volumes.create(name="classport-check-" + uuid4().hex)
+        background.callback(volume.remove)
         database = PostgresContainer("postgres:16-alpine", username="migrator", password="testpw", dbname="image_test")
         with database.with_network(network).with_network_aliases("postgres") as pg:
             maintenance_dsn = "postgresql://migrator:testpw@postgres:5432/image_test"
@@ -55,6 +61,9 @@ def test_release_images_serve_login_api_and_mcp():
                 conn.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO image_app")
                 conn.execute("REVOKE ALL ON public._migrations FROM image_app")
                 conn.execute("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO image_app")
+                conn.execute("CREATE ROLE image_jobs LOGIN PASSWORD 'coordinator-testpw'")
+                conn.execute("GRANT USAGE ON SCHEMA public TO image_jobs")
+                conn.execute("GRANT SELECT, INSERT, UPDATE ON jobs, job_attempts, outbox TO image_jobs")
                 conn.execute(
                     "UPDATE users SET email = %s, password_hash = %s WHERE id = %s",
                     ("release-check@example.test", PasswordHasher().hash(password), user_id),
@@ -67,11 +76,14 @@ def test_release_images_serve_login_api_and_mcp():
                     "INSERT INTO oauth_tokens (user_id, token, client_id, scope, expires_at) "
                     "VALUES (%s, %s, 'image-check', 'mcp', now() + interval '1 hour')", (user_id, token),
                 )
-            backend = DockerContainer(BACKEND).with_network(network).with_network_aliases("classport")
+            redis = DockerContainer("redis:7.4-alpine").with_network(network).with_network_aliases("redis")
+            background.enter_context(redis)
+            backend = (DockerContainer(BACKEND).with_network(network).with_network_aliases("classport")
+                       .with_volume_mapping(volume.name, "/opt/courses", "rw"))
             settings = {
                 "DATABASE_URL": "postgresql://image_app:runtime-testpw@postgres:5432/image_test",
                 "SESSION_SECRET": "disposable-image-check-session-secret", "PUBLIC_URL": "http://frontend",
-                "STUDY_ROOT": "/app", "OPERATOR_EMAIL": "release-check@example.test",
+                "STUDY_ROOT": "/opt/courses", "OPERATOR_EMAIL": "release-check@example.test",
             }
             for key, value in settings.items():
                 backend.with_env(key, value)
@@ -88,6 +100,39 @@ def test_release_images_serve_login_api_and_mcp():
                     time.sleep(1)
                 else:
                     pytest.fail("release image did not become ready")
+                # Accept and persist an authenticated upload while no worker or
+                # coordinator exists, then let the independent processes pick it up.
+                origin = f"http://{api.get_container_host_ip()}:{api.get_exposed_port(8000)}"
+                with httpx.Client(base_url=origin, trust_env=False, timeout=10) as client:
+                    login = client.post("/api/auth/login", json={"email": "release-check@example.test", "password": password})
+                    login.raise_for_status()
+                    client.headers["Cookie"] = "study_session=" + login.cookies["study_session"]
+                    response = client.post("/api/files/upload-url", json={"path": "stopped-worker.txt"})
+                    response.raise_for_status()
+                    target = response.json()
+                    client.put(target["url"], content=b"worker independence check").raise_for_status()
+                    completion = client.post(f"/api/files/{target['file_id']}/versions/{target['version_id']}/complete")
+                    completion.raise_for_status()
+                    assert completion.json()["job_status"] == "queued"
+                    queued = client.get("/api/jobs/" + completion.json()["job_id"])
+                    queued.raise_for_status()
+                    assert queued.json()["status"] == "queued"
+                worker = (DockerContainer(BACKEND).with_network(network)
+                          .with_volume_mapping(volume.name, "/opt/courses", "ro")
+                          .with_command(["uv", "run", "--no-sync", "celery", "-A", "app.celery_app:celery",
+                                         "worker", "--pool=prefork", "--concurrency=1"]))
+                for key, value in {"DATABASE_URL": settings["DATABASE_URL"], "STUDY_ROOT": "/opt/courses",
+                                   "CELERY_BROKER_URL": "redis://redis:6379/0",
+                                   "DB_POOL_MIN_SIZE": "1", "DB_POOL_MAX_SIZE": "2"}.items():
+                    worker.with_env(key, value)
+                background.enter_context(worker)
+                for mode in ("dispatch", "recover"):
+                    coordinator = (DockerContainer(BACKEND).with_network(network)
+                        .with_env("DATABASE_URL", "postgresql://image_jobs:coordinator-testpw@postgres:5432/image_test")
+                        .with_env("CELERY_BROKER_URL", "redis://redis:6379/0")
+                        .with_env("DB_POOL_MIN_SIZE", "1").with_env("DB_POOL_MAX_SIZE", "2")
+                        .with_command(["uv", "run", "--no-sync", "python", "-m", "app.job_coordination", mode]))
+                    background.enter_context(coordinator)
                 frontend = DockerContainer(FRONTEND).with_network(network).with_network_aliases("frontend")
                 with frontend:
                     # Caddy must be listening before the single authenticated probe.

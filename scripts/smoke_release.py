@@ -5,6 +5,7 @@ import asyncio
 from html.parser import HTMLParser
 import os
 import sys
+from uuid import uuid4
 from urllib.parse import urljoin, urlsplit
 
 import httpx
@@ -63,20 +64,57 @@ async def check_release(base_url: str, email: str, password: str, token: str) ->
         courses.raise_for_status()
         if not isinstance(courses.json(), list):
             raise ValueError("course API did not return a list")
+        print("smoke: upload, durable processing, search and download", flush=True)
+        client.headers["Cookie"] = f"study_session={cookie}"
+        marker = "smoke" + uuid4().hex
+        path = f"_release_checks/{marker}.txt"
+        content = f"{marker} file processing check".encode()
+        try:
+            target = await client.post("/api/files/upload-url", json={"path": path})
+            target.raise_for_status()
+            upload = target.json()
+            received = await client.put(upload["url"], content=content,
+                                        headers={"Content-Type": "text/plain", **upload["headers"]})
+            received.raise_for_status()
+            completed = await client.post(f"/api/files/{upload['file_id']}/versions/{upload['version_id']}/complete")
+            completed.raise_for_status()
+            job_id = completed.json()["job_id"]
+            async with asyncio.timeout(35):
+                while True:
+                    state = await client.get(f"/api/jobs/{job_id}")
+                    state.raise_for_status()
+                    status = state.json()["status"]
+                    if status == "succeeded":
+                        break
+                    if status in ("failed", "cancelled"):
+                        raise ValueError("file processing failed")
+                    await asyncio.sleep(0.5)
+            result = await client.get("/api/files/search", params={"q": marker})
+            result.raise_for_status()
+            if not any(hit["file_id"] == upload["file_id"] for hit in result.json()):
+                raise ValueError("processed file is not searchable")
+            downloaded = await client.get("/api/files/raw", params={"file_id": upload["file_id"],
+                                                                    "version_id": upload["version_id"]})
+            downloaded.raise_for_status()
+            if downloaded.content != content:
+                raise ValueError("processed file download differs")
+            print("smoke: MCP initialization, tools, courses and file read", flush=True)
+            async with streamablehttp_client(
+                urljoin(base_url, "/mcp"), headers={"Authorization": f"Bearer {token}"},
+                timeout=10, sse_read_timeout=15,
+            ) as (read, write, _):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    tools = await session.list_tools()
+                    if not {"list_courses", "read_course_file"}.issubset({tool.name for tool in tools.tools}):
+                        raise ValueError("MCP required tools missing")
+                    for name, arguments in (("list_courses", {}), ("read_course_file", {"path": path})):
+                        result = await session.call_tool(name, arguments)
+                        if result.isError or (name == "read_course_file" and marker not in str(result.content)):
+                            raise ValueError("MCP read failed")
+        finally:
+            await client.delete("/api/files", params={"path": path})
 
-    print("smoke: MCP initialization, tool list and read-only course tool", flush=True)
-    async with streamablehttp_client(
-        urljoin(base_url, "/mcp"), headers={"Authorization": f"Bearer {token}"},
-        timeout=10, sse_read_timeout=15,
-    ) as (read, write, _):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            tools = await session.list_tools()
-            if not any(tool.name == "list_courses" for tool in tools.tools):
-                raise ValueError("MCP course tool missing")
-            result = await session.call_tool("list_courses", {})
-            if result.isError:
-                raise ValueError("MCP course tool failed")
     print("smoke: PASS", flush=True)
 
 

@@ -4,6 +4,12 @@ Production uses one GitHub Actions → ECR → SSM → EC2 release flow. The loc
 `deploy.sh` remains the local Docker development workflow. Provisioning, HTTPS,
 persistent storage and initial secrets are described in [the AWS guide](../infra/aws/README.md).
 
+The backend digest also runs the file worker, dispatcher and recovery services.
+Redis uses a private Docker network and its own persistent directory. The
+coordinators receive `.env.coordinator` with a restricted database identity;
+normal releases include background processing in switching and rollback. See
+[WORKERS.md](WORKERS.md) for configuration and task recovery.
+
 ## Configure the release environment
 
 Create the GitHub `production` environment. Restrict its deployment branches/tags
@@ -72,8 +78,10 @@ removed on exit; no `.env.migration` file is retained on the AWS host.
 
 The versioned `deploy-prod.sh` switches both application images with building
 disabled. It checks readiness through the frontend, performs public HTTPS login,
-REST and MCP checks, and inspects both running container image references against
-the requested digests. Only success advances `releases/current` and `previous`.
+REST and MCP checks, uploads a small file and waits for searchable processing,
+then verifies download/MCP reads. It inspects API, frontend and background image
+references against the requested digests. Only success advances `releases/current`
+and `previous`.
 
 ## Results and failures
 

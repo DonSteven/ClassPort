@@ -1,8 +1,8 @@
 """Postgres data access for the FastAPI backend.
 
 Async pool (psycopg3) + helper functions (`fetch`, `fetchrow`, `fetchval`,
-`execute`, `db()`). Pool lifecycle is owned by `app/main.py`'s lifespan —
-`init_pool()` on startup, `close_pool()` on shutdown.
+`execute`, `db()`). Each API, worker child or maintenance process owns its
+pool: `init_pool()` on startup, `close_pool()` on shutdown.
 
 Services and routers should always go through these helpers; opening
 connections by hand defeats the pool. For raw work that needs a transaction
@@ -79,7 +79,7 @@ async def _configure_connection(conn) -> None:
 
 async def init_pool(dsn: str | None = None) -> None:
     """Create the global async pool. Idempotent — safe to call once during
-    app startup. The lifespan in app/main.py is the canonical caller."""
+    process startup, on its own active event loop."""
     global _pool
     if _pool is not None:
         return
@@ -130,8 +130,8 @@ async def db():
     request. Inert (no-op) when no user is set, e.g. unauthed endpoints or
     background jobs that haven't called `set_current_user_id`.
     """
-    # Local import avoids a circular: app.auth imports `from . import db`.
-    from .auth import get_current_user_id
+    # This context module has no dependency on web settings or authentication.
+    from .user_context import get_current_user_id
 
     with operation("database.transaction"):
         async with AsyncExitStack() as stack:

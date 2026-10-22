@@ -1,10 +1,10 @@
-"""Operator command to index completed database file versions.
+"""Operator command to enqueue processing of completed file versions.
 
-Run with DATABASE_URL and STUDY_ROOT in the environment:
+Run with runtime DATABASE_URL in the environment:
     uv run --no-sync python scripts/index_files.py --user-id USER_UUID
     uv run --no-sync python scripts/index_files.py --all-users
 
-Unchanged immutable versions are skipped. Legacy files must be imported first.
+Existing jobs are reused. A worker and dispatcher perform the actual processing.
 """
 import argparse
 import asyncio
@@ -20,7 +20,7 @@ sys.path.insert(0, str(_HERE.parent))
 from app.logging_config import configure_logging  # noqa: E402
 
 from app import db  # noqa: E402
-from app.services.file_index import index_user  # noqa: E402
+from app.services.jobs import enqueue_user  # noqa: E402
 
 
 def parse_args(argv=None):
@@ -35,12 +35,12 @@ async def _main(args) -> dict:
     await db.init_pool()
     try:
         if args.user_id is not None:
-            return await index_user(args.user_id)
+            return await enqueue_user(args.user_id)
         rows = await db.fetch("SELECT DISTINCT user_id FROM files ORDER BY user_id")
         reports = []
         for row in rows:
-            reports.append({"user_id": row["user_id"], **await index_user(row["user_id"])})
-        return {"failed": sum(report["failed"] for report in reports), "users": reports}
+            reports.append({"user_id": row["user_id"], **await enqueue_user(row["user_id"])})
+        return {"queued": sum(report["queued"] for report in reports), "users": reports}
     finally:
         await db.close_pool()
 
@@ -49,4 +49,3 @@ if __name__ == "__main__":
     configure_logging()
     stats = asyncio.run(_main(parse_args()))
     print(json.dumps(stats, ensure_ascii=False))
-    raise SystemExit(1 if stats["failed"] else 0)

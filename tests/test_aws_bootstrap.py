@@ -95,6 +95,7 @@ def test_fresh_database_uses_separate_non_admin_runtime_role(monkeypatch):
             conn.execute("ALTER DATABASE aws_test OWNER TO rds_admin")
         config = {
             "APP_DB_PASSWORD": "runtime-@-$-password", "MIGRATION_DB_PASSWORD": "maintenance-password",
+            "COORDINATOR_DB_PASSWORD": "coordinator-password",
             "SMOKE_EMAIL": "smoke@example.test", "SMOKE_PASSWORD": "smoke-test-password",
             "SMOKE_MCP_TOKEN": "smoke-test-token",
         }

@@ -8,8 +8,16 @@ from app import db
 from app.auth import SENTINEL_USER_ID as USER
 from app.services import file_index as index
 from app.services import file_records as files
+from app.services import jobs
 from app.storage import get_storage
 from app.storage.base import ObjectRef
+
+
+async def process_user(user_id):
+    report = await jobs.enqueue_user(user_id)
+    for job_id in report["job_ids"]:
+        await jobs.run(job_id, "test-worker")
+    return report
 
 
 @pytest.fixture(autouse=True)
@@ -33,38 +41,39 @@ def make_pdf(text):
 ])
 async def test_index_and_search_formats(client, path, data, word):
     version = await files.upload(USER, path, data if data is not None else make_pdf("quantum mechanics"))
-    stats = await index.index_user(USER)
-    assert stats["indexed"] == 1 and stats["failed"] == 0
+    stats = await process_user(USER)
+    assert stats["queued"] == 1
+    assert (await jobs.get(USER, version["job_id"]))["status"] == "succeeded"
     result = await index.search(USER, word)
     assert result[0]["path"] == path and result[0]["file_id"] == version["file_id"]
     assert result[0]["version_id"] == version["version_id"]
     assert "<<" in result[0]["snippet"]
-    assert (await index.index_user(USER))["skipped"] == 1
+    assert (await process_user(USER))["queued"] == 0
 
 
 async def test_search_tracks_rename_and_hides_replaced_or_deleted_version(client):
     await files.upload(USER, "course/lecture.txt", b"quantum mechanics")
-    await index.index_user(USER)
+    await process_user(USER)
     await files.move(USER, "course", "renamed")
     assert (await index.search(USER, "quantum"))[0]["path"] == "renamed/lecture.txt"
     await files.upload(USER, "renamed/lecture.txt", b"relativity principles")
     assert await index.search(USER, "quantum") == []
-    await index.index_user(USER)
+    await process_user(USER)
     assert (await index.search(USER, "relativity"))[0]["path"] == "renamed/lecture.txt"
     await files.delete(USER, ["renamed"])
     assert await index.search(USER, "relativity") == []
-    assert (await index.index_user(USER))["pruned"] == 1
+    assert (await process_user(USER))["total_seen"] == 0
 
 
 async def test_failed_pdf_and_missing_object_do_not_clear_other_indexes(client):
     await files.upload(USER, "valid.txt", b"quantum mechanics")
-    await index.index_user(USER)
+    await process_user(USER)
     await files.upload(USER, "broken.pdf", b"not a pdf")
     version = await files.upload(USER, "missing.txt", b"missing content")
     row = await files.get_version(USER, version["file_id"], version["version_id"])
     await get_storage().delete(ObjectRef(row["object_key"]))
-    stats = await index.index_user(USER)
-    assert stats["failed"] == 2 and stats["pruned"] == 0
+    await process_user(USER)
+    assert await db.fetchval("SELECT count(*) FROM jobs WHERE status = 'failed'") == 2
     assert len(await index.search(USER, "quantum")) == 1
 
 
@@ -73,19 +82,19 @@ async def test_index_and_search_are_user_scoped(client):
     await db.execute("INSERT INTO users(id,email) VALUES (%s,%s)", other, f"{other}@test")
     await files.upload(USER, "same.txt", b"quantum physics")
     await files.upload(other, "same.txt", b"quantum chemistry")
-    assert (await index.index_user(USER))["indexed"] == 1
+    assert (await process_user(USER))["queued"] == 1
     assert await index.search(other, "quantum") == []
-    assert (await index.index_user(other))["indexed"] == 1
+    assert (await process_user(other))["queued"] == 1
     assert len(await index.search(other, "quantum")) == 1
     assert "chemistry" not in str(await index.search(USER, "quantum"))
 
 
 async def test_empty_short_query_unsupported_and_nuls(client):
-    assert (await index.index_user(USER))["total_seen"] == 0
+    assert (await process_user(USER))["total_seen"] == 0
     await files.upload(USER, "image.png", b"not indexed")
     await files.upload(USER, "notes.txt", b"quantum\x00 mechanics")
-    stats = await index.index_user(USER)
-    assert stats["indexed"] == stats["skipped"] == 1
+    stats = await process_user(USER)
+    assert stats["queued"] == 1 and stats["total_seen"] == 2
     assert await index.search(USER, "q") == []
     assert await index.search(USER, "nonsenseword") == []
     assert len(await index.search(USER, "quantum", limit=1)) == 1
@@ -166,9 +175,10 @@ async def test_failed_revision_keeps_old_index_hidden(client):
     original = await files.upload(USER, "lecture.pdf", make_pdf("quantum mechanics"))
     await index.index_file(USER, original["file_id"], original["version_id"])
     broken = await files.upload(USER, "lecture.pdf", b"not a pdf")
-    stats = await index.index_user(USER)
-    assert stats["failed"] == 1 and stats["errors"][0]["error_code"] == "invalid_pdf"
-    assert stats["errors"][0]["retryable"] is False
+    await process_user(USER)
+    failure = await jobs.get(USER, broken["job_id"])
+    assert failure["status"] == "failed" and failure["error_code"] == "invalid_pdf"
+    assert failure["can_retry"] is False
     assert await db.fetchval("SELECT file_version_id FROM file_index") == original["version_id"]
     assert await index.search(USER, "quantum") == []
     await files.delete(USER, ["lecture.pdf"])

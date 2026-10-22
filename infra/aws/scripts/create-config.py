@@ -34,6 +34,7 @@ def main():
         "SMOKE_MCP_TOKEN": secrets.token_urlsafe(32),
         "APP_DB_PASSWORD": secrets.token_urlsafe(32),
         "MIGRATION_DB_PASSWORD": secrets.token_urlsafe(32),
+        "COORDINATOR_DB_PASSWORD": secrets.token_urlsafe(32),
         "SESSION_SECRET": secrets.token_urlsafe(48),
         "SECRETS_ENCRYPTION_KEY": base64.urlsafe_b64encode(secrets.token_bytes(32)).decode(),
     }

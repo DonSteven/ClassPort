@@ -26,6 +26,7 @@ crash.log
 .env.docker
 .env.migration
 .env.smoke
+.env.coordinator
 release.env
 /releases/
 /incoming/

@@ -217,7 +217,40 @@
     "uploadFailed": "Upload failed: {{name}} — {{msg}}",
     "folderFailed": "Failed to create folder — {{msg}}",
     "renameFailed": "Rename failed — {{msg}}",
-    "deleteFailed": "Delete failed — {{msg}}"
+    "deleteFailed": "Delete failed — {{msg}}",
+    "searchable": "Searchable",
+    "notIndexed": "Not indexed",
+    "retryProcessing": "Retry processing",
+    "retryQueued": "Processing queued again",
+    "uploadStates": {
+      "waiting": "Waiting to upload",
+      "uploading": "Uploading",
+      "uploaded": "Upload complete",
+      "failed": "Upload failed",
+      "incomplete": "Upload incomplete"
+    },
+    "processingStates": {
+      "queued": "Waiting to process",
+      "running": "Processing",
+      "retry_wait": "Waiting to retry",
+      "succeeded": "Processing complete",
+      "failed": "Processing failed",
+      "cancelled": "Cancelled"
+    },
+    "processingErrors": {
+      "invalid_pdf": "The PDF could not be read",
+      "encrypted_pdf": "The PDF requires a password",
+      "invalid_notebook": "The notebook could not be read",
+      "unsupported_format": "This file format cannot be searched",
+      "content_missing": "File content is missing",
+      "storage_unavailable": "File storage is temporarily unavailable",
+      "database_unavailable": "The database is temporarily unavailable",
+      "worker_lost": "Processing was interrupted",
+      "version_changed": "A newer version is current",
+      "file_deleted": "The file was deleted",
+      "unsupported_pipeline": "A compatible processing worker is required",
+      "processing_error": "File processing failed"
+    }
   },
   "activity": {
     "title": "Activity",

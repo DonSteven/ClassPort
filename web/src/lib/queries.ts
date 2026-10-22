@@ -521,13 +521,30 @@ export type FileEntry = {
   size?: number;
   content_type?: string;
   updated_at?: string;
+  job_id: string | null;
+  job_status: "queued" | "running" | "retry_wait" | "succeeded" | "failed" | "cancelled" | null;
+  job_error_code: string | null;
+  job_error: string | null;
+  job_can_retry: boolean;
+  searchable: boolean;
 };
 
+const activeJob = (entry: FileEntry) =>
+  entry.job_status !== null && ["queued", "running", "retry_wait"].includes(entry.job_status);
+
 export function useFilesList(prefix: string) {
+  const qc = useQueryClient();
   return useQuery({
     queryKey: ["files", "list", prefix],
-    queryFn: () =>
-      api.get<FileEntry[]>("/api/files/list", { prefix }),
+    queryFn: async () => {
+      const previous = qc.getQueryData<FileEntry[]>(["files", "list", prefix]);
+      const entries = await api.get<FileEntry[]>("/api/files/list", { prefix });
+      if (previous?.some(activeJob)) {
+        qc.invalidateQueries({ queryKey: ["files", "search"] });
+      }
+      return entries;
+    },
+    refetchInterval: (query) => query.state.data?.some(activeJob) ? 2000 : false,
     staleTime: 60_000, // listing is cheap; refetch on focus after a min
   });
 }
@@ -639,11 +656,21 @@ export function useUploadFile() {
       if (!res.ok) {
         throw new Error(`upload failed: ${res.status} ${res.statusText}`);
       }
-      return { path, file_id, version_id };
+      return api.post<{ path: string; file_id: string; version_id: string; job_id: string }>(
+        `/api/files/${file_id}/versions/${version_id}/complete`,
+      );
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["files"] });
     },
+  });
+}
+
+export function useRetryFileJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (jobId: string) => api.post(`/api/jobs/${jobId}/retry`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["files"] }); },
   });
 }
 

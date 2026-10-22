@@ -23,11 +23,13 @@ from uuid import uuid4
 PG_IMAGE = "postgres:16-alpine"
 CURRENT_STAGE = "preflight"
 RELEASE_FILES = ("release.env", "docker-compose.prod.yml", "deploy-prod.sh", "bootstrap.py", "recovery.py")
+WRITERS = ("classport", "frontend", "worker", "dispatcher", "job-recovery")
 STATE_SQL = """SELECT json_build_object(
  'migrations', (SELECT json_agg(m ORDER BY filename) FROM public._migrations m),
  'users', (SELECT count(*) FROM users), 'courses', (SELECT count(*) FROM courses),
  'tasks', (SELECT count(*) FROM tasks), 'file_index', (SELECT count(*) FROM file_index),
  'files', (SELECT count(*) FROM files), 'file_versions', (SELECT count(*) FROM file_versions),
+ 'jobs', (SELECT count(*) FROM jobs), 'job_attempts', (SELECT count(*) FROM job_attempts),
  'references', (SELECT coalesce(json_agg(object_key ORDER BY object_key), '[]')
                 FROM file_versions WHERE storage_backend = 'local' AND upload_status = 'completed'))"""
 
@@ -198,9 +200,9 @@ def backup(root, settings):
         run(["docker", "pull", PG_IMAGE])
         secret = aws("secretsmanager", "get-secret-value", "--secret-id", settings["CONFIG_SECRET_ARN"])
         config = json.loads(secret["SecretString"])
-        services = [compose(root, release, "ps", "-q", service) for service in ("classport", "frontend")]
+        services = [compose(root, release, "ps", "-q", service) for service in WRITERS]
         if not all(services):
-            raise ValueError("Both application services must be running before scheduled backup")
+            raise ValueError("Application and background services must be running before scheduled backup")
         reject_other_writers(root, set(services))
         manifest = {"format": 1, "backup_id": datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid4().hex,
                     "started_at": now(), "release": version,
@@ -210,7 +212,7 @@ def backup(root, settings):
         try:
             progress("backup.drain")
             stopped = True
-            compose(root, release, "stop", "--timeout", "300", "classport", "frontend")
+            compose(root, release, "stop", "--timeout", "300", *WRITERS)
             states = json.loads(run(["docker", "inspect", *services]))
             if any(item["State"]["Running"] or item["State"]["ExitCode"] != 0 for item in states):
                 raise ValueError("Application did not drain cleanly; no consistent backup will be published")
@@ -241,7 +243,7 @@ def backup(root, settings):
             if stopped:
                 failed_stage = CURRENT_STAGE
                 progress("backup.resume")
-                compose(root, release, "up", "-d", "--wait", "--wait-timeout", "90", "classport", "frontend")
+                compose(root, release, "up", "-d", "--wait", "--wait-timeout", "90", *WRITERS)
                 CURRENT_STAGE = failed_stage
 
 
@@ -328,7 +330,12 @@ def restore(root, settings, args):
         progress("restore.configuration")
         phase(work, root, config, master, target, version["BACKEND_IMAGE"], "configure")
         (root / "releases/current").symlink_to(release)
-        compose(root, release, "up", "-d", "--wait", "--wait-timeout", "90", "classport", "frontend")
+        (root / "data/redis").mkdir(exist_ok=False)
+        # This is a new target with a fresh Redis directory. Recover database
+        # executions and recreate notifications before any background consumer starts.
+        compose(root, release, "run", "--rm", "--no-deps", "job-recovery",
+                "uv", "run", "--no-sync", "python", "-m", "app.job_coordination", "restore", "--once")
+        compose(root, release, "up", "-d", "--wait", "--wait-timeout", "90", "redis", *WRITERS)
         progress("restore.verify")
         checks = dict(config)
         credentials_path = getattr(args, "check_credentials_file", None)
@@ -367,10 +374,18 @@ def monitor(root, settings):
     age = time.time() - datetime.fromisoformat(json.loads(last.read_text())["consistent_at"]).timestamp() if last.exists() else 1e9
     attempt = root / "last-backup-attempt.json"
     failed = int(attempt.exists() and json.loads(attempt.read_text())["status"] == "failed")
+    job_metrics = {"JobMetricsReady": 0}
+    try:
+        release = (root / "releases/current").resolve(strict=True)
+        output = compose(root, release, "run", "--rm", "--no-deps", "job-recovery",
+                         "uv", "run", "--no-sync", "python", "-m", "app.job_coordination", "metrics", "--once")
+        job_metrics.update(json.loads(output.splitlines()[-1]), JobMetricsReady=1)
+    except Exception:
+        pass
     metrics = [{"MetricName": name, "Value": value,
                 "Dimensions": [{"Name": "Environment", "Value": settings["ENVIRONMENT"]}]}
                for name, value in {"APIReady": ready, "DiskUsedPercent": usage.used / usage.total * 100,
-                                   "BackupAgeSeconds": age, "BackupFailed": failed}.items()]
+                                   "BackupAgeSeconds": age, "BackupFailed": failed, **job_metrics}.items()]
     aws("cloudwatch", "put-metric-data", "--namespace", "ClassPort/Operations", "--metric-data", json.dumps(metrics))
 
 

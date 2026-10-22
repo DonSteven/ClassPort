@@ -35,6 +35,7 @@ async def test_frozen_put_and_late_upload(client):
     first = await files.begin_upload(USER, "lecture.pdf")
     newer = await files.upload(USER, "lecture.pdf", b"newer")
     await files.accept_upload(USER, first["file_id"], first["version_id"], b"older")
+    await files.complete_upload(USER, first["file_id"], first["version_id"])
     assert (await files.current_version(USER, "lecture.pdf"))["id"] == newer["version_id"]
     with pytest.raises(StorageConflict):
         await files.accept_upload(USER, first["file_id"], first["version_id"], b"replacement")
@@ -48,6 +49,7 @@ async def test_interrupted_put_reuses_only_identical_bytes(client):
     with pytest.raises(StorageConflict):
         await files.accept_upload(USER, target["file_id"], target["version_id"], b"different")
     await files.accept_upload(USER, target["file_id"], target["version_id"], b"published")
+    await files.complete_upload(USER, target["file_id"], target["version_id"])
     assert await files.download(USER, "lecture.pdf") == b"published"
 
 
@@ -114,7 +116,9 @@ async def test_import_is_repeatable_links_index_and_keeps_sources(client, tmp_pa
     assert (await db.fetchrow("SELECT count(*) AS n FROM file_versions"))["n"] == 1
     assert original.read_bytes() == data
     assert await files.download(USER, "COURSE/lecture.txt") == data
-    assert [r["name"] for r in await files.list_files(USER, "COURSE")] == ["empty", "lecture.txt"]
+    assert [r["logical_path"] for r in await db.fetch(
+        "SELECT logical_path FROM files WHERE kind = 'file' ORDER BY logical_path"
+    )] == ["COURSE/lecture.txt"]
     from app.services.file_index import search
     assert (await search(USER, "searchable"))[0]["path"] == "COURSE/lecture.txt"
     index = await db.fetchrow("SELECT * FROM file_index")
@@ -144,10 +148,12 @@ async def test_http_version_upload_download_and_old_url_freeze(client, monkeypat
     first = (await client.post("/api/files/upload-url", json={"path": "lecture.pdf"})).json()
     assert "file_id" in first and "object_key" not in first
     assert (await client.put(first["url"], content=b"old pdf", headers={"content-type": "application/pdf"})).status_code == 200
+    assert (await client.post(f"/api/files/{first['file_id']}/versions/{first['version_id']}/complete")).status_code == 200
     old_url = (await client.get("/api/files/signed-url", params={"path": "lecture.pdf"})).json()["url"]
     second = (await client.post("/api/files/upload-url", json={"path": "lecture.pdf"})).json()
     assert first["file_id"] == second["file_id"]
     assert (await client.put(second["url"], content=b"new pdf")).status_code == 200
+    assert (await client.post(f"/api/files/{second['file_id']}/versions/{second['version_id']}/complete")).status_code == 200
     assert (await client.put(first["url"], content=b"corrupt")).status_code == 409
     assert (await client.get(old_url)).content == b"old pdf"
     assert (await client.get("/api/files/raw", params={"path": "lecture.pdf"})).content == b"new pdf"

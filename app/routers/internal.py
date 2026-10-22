@@ -13,11 +13,10 @@ import logging
 import os
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, status
+from fastapi import APIRouter, Header, HTTPException, Request, status
 
 from ..auth import set_current_user_id
-from ..logging_config import operation
-from ..services import file_index as file_index_svc
+from ..services import jobs as jobs_svc
 from ..services import telegram as telegram_svc
 from ..services import user_secrets as user_secrets_svc
 
@@ -34,46 +33,25 @@ def _check_secret(provided: str | None) -> None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="bad secret")
 
 
-async def _reindex(user_id: UUID) -> None:
-    """Run a scoped maintenance rebuild; durable dispatch follows in B4/B5."""
-    try:
-        with operation("index.run"):
-            stats = await file_index_svc.index_user(user_id)
-        log.info("index.completed", extra={"event": "index.completed", "stage": "index", **stats})
-    except Exception:
-        log.exception("index.failed", extra={"event": "index.failed", "stage": "index"})
-
-
 @router.post("/sync")
-def trigger_sync(
-    background: BackgroundTasks,
+async def trigger_sync(
     user_id: UUID,
     mode: str = "sync",
     x_internal_secret: str | None = Header(default=None, alias="X-Internal-Secret"),
 ):
-    """Queue a re-index of one user's completed file versions.
-
-    The `mode` query param is accepted (and echoed back) for compatibility
-    with callers that historically distinguished sync directions, but the
-    only action this endpoint performs today is reindexing. Returns 200
-    immediately; indexing runs as a FastAPI background task.
-    """
+    """Persist per-file rebuild requests for one explicitly selected user."""
     _check_secret(x_internal_secret)
-    background.add_task(_reindex, user_id)
-    return {"ok": True, "mode": mode, "queued": "reindex"}
+    return {"ok": True, "mode": mode, **await jobs_svc.enqueue_user(user_id)}
 
 
 @router.post("/index-files")
-def trigger_index(
-    background: BackgroundTasks,
+async def trigger_index(
     user_id: UUID,
     x_internal_secret: str | None = Header(default=None, alias="X-Internal-Secret"),
 ):
-    """Queue a re-index of one user's completed file versions."""
+    """Persist per-file rebuild requests without executing them in the API."""
     _check_secret(x_internal_secret)
-    background.add_task(_reindex, user_id)
-    return {"ok": True, "queued": "reindex"}
-
+    return {"ok": True, **await jobs_svc.enqueue_user(user_id)}
 
 
 @router.post("/telegram")

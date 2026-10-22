@@ -41,6 +41,16 @@ compose() {
         --env-file "$release/release.env" -f "$release/docker-compose.prod.yml" "$@"
 }
 
+stop_background() {
+    local release="$1" available service
+    available=$(compose "$release" config --services)
+    for service in dispatcher job-recovery worker; do
+        if [[ $'\n'"$available"$'\n' == *$'\n'"$service"$'\n'* ]]; then
+            compose "$release" stop "$service" || return 1
+        fi
+    done
+}
+
 manifest_json() {
     load_manifest "$1/release.env"
     printf '{"commit":"%s","backend":"%s","frontend":"%s"}' \
@@ -74,7 +84,10 @@ verify_images() {
     local release="$1" backend frontend container actual service expected
     load_manifest "$release/release.env"
     backend="$BACKEND_IMAGE"; frontend="$FRONTEND_IMAGE"
-    for service in classport frontend; do
+    for service in classport frontend worker dispatcher job-recovery; do
+        if [[ $'\n'"$(compose "$release" config --services)"$'\n' != *$'\n'"$service"$'\n'* ]]; then
+            continue
+        fi
         expected="$backend"
         [ "$service" != frontend ] || expected="$frontend"
         container=$(compose "$release" ps -q "$service") || return 1
@@ -129,7 +142,7 @@ for name in .env .env.smoke; do
 done
 [ -f "$ROOT/certs/global-bundle.pem" ] || die "RDS CA bundle missing"
 mountpoint -q "$ROOT/data" || die "$ROOT/data must be the mounted persistent data disk"
-mkdir -p "$ROOT/data/courses"
+mkdir -p "$ROOT/data/courses" "$ROOT/data/redis"
 old=''
 if [ -L "$STATE/current" ]; then
     old=$(readlink -f "$STATE/current")
@@ -175,11 +188,12 @@ on_exit() {
         records_restored=0
     fi
     if [ "$switch_started" -eq 1 ]; then
-        compose "$candidate" logs --tail 40 classport frontend || true
+        stop_background "$candidate" || true
+        compose "$candidate" logs --tail 40 || true
         if [ -z "$old" ]; then
             rollback=no_previous_release
             log "no previous successful release is recorded"
-        elif compose "$old" up -d --no-build --pull never classport frontend && check_release "$old"; then
+        elif compose "$old" up -d --no-build --pull never --remove-orphans && check_release "$old"; then
             rollback=succeeded
             log "previous image pair restored; deployment remains failed"
         else
@@ -208,15 +222,19 @@ if [ -n "$old" ]; then
     fi
 fi
 compose "$candidate" config -q
+if [[ $'\n'"$(compose "$candidate" config --services)"$'\n' == *$'\n'dispatcher$'\n'* ]]; then
+    [ -f "$ROOT/.env.coordinator" ] || die "$ROOT/.env.coordinator missing"
+fi
 pass_step
 start_step pull
 log "pulling the release image pair"
-compose "$candidate" pull --policy missing classport frontend
+compose "$candidate" pull --policy missing
 pass_step
 start_step start
 switch_started=1
+[ -z "$old" ] || stop_background "$old"
 log "starting the release image pair"
-compose "$candidate" up -d --no-build --pull never classport frontend
+compose "$candidate" up -d --no-build --pull never --remove-orphans
 pass_step
 check_release "$candidate"
 start_step promote

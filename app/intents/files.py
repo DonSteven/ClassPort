@@ -3,6 +3,7 @@ from typing import Any
 from uuid import UUID
 
 from ..services import file_index as file_index_svc
+from ..services import jobs as jobs_svc
 from ..services import file_records as svc
 
 
@@ -62,7 +63,7 @@ async def index_file(user_id: UUID, file_id: UUID, version_id: UUID) -> dict[str
 
 
 async def index_user(user_id: UUID) -> dict[str, Any]:
-    return await file_index_svc.index_user(user_id)
+    return await jobs_svc.enqueue_user(user_id)
 
 
 async def create_folder(user_id: UUID, path: str) -> dict:
@@ -72,6 +73,10 @@ async def create_folder(user_id: UUID, path: str) -> dict:
 async def accept_upload(user_id: UUID, file_id: UUID, version_id: UUID,
                         data: bytes, content_type: str | None = None) -> dict:
     return await svc.accept_upload(user_id, file_id, version_id, data, content_type)
+
+
+async def complete_upload(user_id: UUID, file_id: UUID, version_id: UUID) -> dict:
+    return await svc.complete_upload(user_id, file_id, version_id)
 
 
 async def current_version(user_id: UUID, path: str) -> dict:

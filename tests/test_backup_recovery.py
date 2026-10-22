@@ -102,7 +102,7 @@ def test_archive_round_trip_keeps_hidden_files_versions_and_original_secret(host
     assert manifest["configuration"]["version_id"] == "original-secret-version"
     assert manifest["files"] == {"user/empty/.keep": 0, "user/sample.pdf": 8}
     assert "not-for-logs" not in json.dumps(manifest)
-    assert calls.index(("stop", "--timeout", "300", "classport", "frontend")) < next(i for i, call in enumerate(calls) if call[0] == "pg_dump")
+    assert calls.index(("stop", "--timeout", "300", *recovery.WRITERS)) < next(i for i, call in enumerate(calls) if call[0] == "pg_dump")
     assert calls[-1][:2] == ("up", "-d")
     args = target_args(tmp_path, result)
     report = recovery.restore(root, settings, args)
@@ -163,4 +163,16 @@ def test_monitor_reports_backup_failure_and_age(host, monkeypatch):
     recovery.monitor(root, settings)
     metrics = {item["MetricName"]: item["Value"] for item in json.loads(calls[-1][-1])}
     assert metrics["APIReady"] == 0 and metrics["BackupFailed"] == 1
+
+
+def test_monitor_reports_task_metrics_through_the_coordinator(host, monkeypatch):
+    root, settings, objects, calls = host
+    settings["ENVIRONMENT"] = "test"
+    monkeypatch.setattr(recovery, "urlopen", lambda *a, **k: (_ for _ in ()).throw(OSError()))
+    monkeypatch.setattr(recovery, "compose", lambda *a: json.dumps({"JobWaitingAgeSeconds": 42, "JobExpiredLeases": 1}))
+    monkeypatch.setattr(recovery, "aws", lambda *a: calls.append(a))
+    recovery.monitor(root, settings)
+    metrics = {item["MetricName"]: item["Value"] for item in json.loads(calls[-1][-1])}
+    assert metrics["JobMetricsReady"] == 1 and metrics["JobWaitingAgeSeconds"] == 42
+    assert metrics["JobExpiredLeases"] == 1
     assert metrics["BackupAgeSeconds"] > 93600

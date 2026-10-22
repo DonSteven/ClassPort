@@ -12,6 +12,8 @@ from ..schemas import EventCreate
 from ..storage import get_storage
 from ..storage.base import ObjectRef, StorageConflict, StorageNotFound
 from . import events as events_svc
+from . import file_index as index_svc
+from . import jobs as jobs_svc
 
 log = logging.getLogger(__name__)
 
@@ -95,15 +97,26 @@ async def list_files(user_id: UUID, prefix: str = "", *, limit: int = 200) -> li
     prefix = clean_path(prefix, allow_root=True)
     start = prefix + "/" if prefix else ""
     rows = await db.fetch(
-        """SELECT f.*, v.size, v.content_type FROM files f
+        """SELECT f.*, v.size, v.content_type, j.id AS job_id, j.status AS job_status,
+                  j.error_code AS job_error_code, j.last_error AS job_error,
+                  (i.file_version_id = f.current_version_id
+                   AND i.pipeline_version = %s AND (j.id IS NULL OR j.status = 'succeeded'))
+                     AS searchable
+           FROM files f
            LEFT JOIN file_versions v ON v.user_id = f.user_id
              AND v.file_id = f.id AND v.id = f.current_version_id
+           LEFT JOIN file_index i ON i.user_id = f.user_id AND i.file_id = f.id
+           LEFT JOIN LATERAL (SELECT id, status, error_code, last_error FROM jobs
+               WHERE user_id = f.user_id AND file_id = f.id
+                 AND file_version_id = f.current_version_id AND job_type = 'index_file'
+                 AND pipeline_version = %s ORDER BY created_at DESC LIMIT 1) j ON true
            WHERE f.user_id = %s AND f.deleted_at IS NULL
              AND left(f.logical_path, length(%s)) = %s
              AND strpos(substr(f.logical_path, length(%s) + 1), '/') = 0
              AND f.logical_path <> %s
            ORDER BY (f.kind = 'directory') DESC, lower(f.logical_path), f.logical_path
-           LIMIT %s""", user_id, start, start, start, prefix, limit,
+           LIMIT %s""", index_svc.PIPELINE_VERSION, index_svc.PIPELINE_VERSION,
+        user_id, start, start, start, prefix, limit,
     )
     out = []
     for row in rows:
@@ -116,6 +129,11 @@ async def list_files(user_id: UUID, prefix: str = "", *, limit: int = 200) -> li
             "file_id": row["id"], "version_id": row["current_version_id"],
             "size": row["size"], "content_type": row["content_type"],
             "updated_at": row["updated_at"].isoformat(),
+            "job_id": row["job_id"], "job_status": row["job_status"],
+            "job_error_code": row["job_error_code"], "job_error": row["job_error"],
+            "job_can_retry": row["job_status"] == "failed" and row["job_error_code"]
+                in jobs_svc.RETRYABLE | {"unsupported_pipeline"},
+            "searchable": bool(row["searchable"]),
         })
     return out
 
@@ -154,6 +172,7 @@ async def begin_upload(user_id: UUID, path: str) -> dict:
 
 async def accept_upload(user_id: UUID, file_id: UUID, version_id: UUID,
                         data: bytes, content_type: str | None = None) -> dict:
+    """Stage immutable bytes; completion is an explicit, idempotent operation."""
     async with db.db() as conn, conn.transaction():
         await _lock_tree(conn, user_id)
         row = await (await conn.execute(
@@ -181,12 +200,43 @@ async def accept_upload(user_id: UUID, file_id: UUID, version_id: UUID,
         if await store.stat(ref) != len(data):
             raise StorageConflict("stored content size differs from upload")
         await conn.execute(
-            """UPDATE file_versions SET size = %s, sha256 = %s, content_type = %s,
-               upload_status = 'completed', completed_at = now()
+            """UPDATE file_versions SET size = %s, sha256 = %s, content_type = %s
                WHERE user_id = %s AND file_id = %s AND id = %s""",
             (len(data), hashlib.sha256(data).hexdigest(), mime, user_id, file_id, version_id),
         )
-        # A previously requested upload finishing late must not replace a newer revision.
+    return {"path": row["logical_path"], "file_id": str(file_id),
+            "version_id": str(version_id), "size": len(data), "content_type": mime}
+
+
+async def complete_upload(user_id: UUID, file_id: UUID, version_id: UUID) -> dict:
+    """Publish the completed revision, job and outbox in one transaction."""
+    async with db.db() as conn, conn.transaction():
+        await _lock_tree(conn, user_id)
+        row = await (await conn.execute(
+            """SELECT v.*, f.logical_path FROM file_versions v JOIN files f
+                 ON f.user_id = v.user_id AND f.id = v.file_id
+               WHERE v.user_id = %s AND v.file_id = %s AND v.id = %s
+                 AND f.deleted_at IS NULL FOR UPDATE OF v, f""",
+            (user_id, file_id, version_id),
+        )).fetchone()
+        if row is None:
+            raise StorageNotFound("file version not found")
+        if row["upload_status"] == "abandoned":
+            raise StorageConflict("upload was abandoned")
+        if row["upload_status"] == "pending":
+            if row["size"] is None or row["sha256"] is None:
+                raise StorageConflict("upload bytes have not been received")
+            store = get_storage(row["storage_backend"])
+            ref = ObjectRef(row["object_key"], row["object_version"])
+            data = await store.read(ref)
+            if (await store.stat(ref) != row["size"] or len(data) != row["size"]
+                    or hashlib.sha256(data).hexdigest() != row["sha256"]):
+                raise StorageConflict("stored content differs from the received upload")
+            await conn.execute(
+                """UPDATE file_versions SET upload_status = 'completed', completed_at = now()
+                   WHERE user_id = %s AND file_id = %s AND id = %s""", (user_id, file_id, version_id),
+            )
+        # An earlier upload finishing late cannot replace a newer revision.
         await conn.execute(
             """UPDATE files f SET current_version_id = %s, updated_at = now()
                WHERE f.user_id = %s AND f.id = %s AND (f.current_version_id IS NULL OR
@@ -194,15 +244,29 @@ async def accept_upload(user_id: UUID, file_id: UUID, version_id: UUID,
                   AND file_id = %s AND id = f.current_version_id) < %s)""",
             (version_id, user_id, file_id, user_id, file_id, row["revision"]),
         )
+        job = await jobs_svc.create(conn, user_id, file_id, version_id)
+        await conn.execute(
+            """UPDATE jobs j SET status = 'cancelled', error_code = 'version_changed',
+                 last_error = 'A newer version is current', finished_at = now(), updated_at = now()
+               FROM files f WHERE j.user_id = %s AND j.file_id = %s
+                 AND f.user_id = j.user_id AND f.id = j.file_id
+                 AND j.file_version_id <> f.current_version_id
+                 AND j.status IN ('queued', 'retry_wait')""", (user_id, file_id),
+        )
+        job = await (await conn.execute(
+            "SELECT * FROM jobs WHERE user_id = %s AND id = %s", (user_id, job["id"]),
+        )).fetchone()
     result = {"path": row["logical_path"], "file_id": str(file_id),
-              "version_id": str(version_id), "size": len(data), "content_type": mime}
+              "version_id": str(version_id), "size": row["size"],
+              "content_type": row["content_type"], "job_id": job["id"], "job_status": job["status"]}
     await _log(user_id, "storage:upload", result)
     return result
 
 
 async def upload(user_id: UUID, path: str, data: bytes, content_type: str | None = None) -> dict:
     target = await begin_upload(user_id, path)
-    return await accept_upload(user_id, target["file_id"], target["version_id"], data, content_type)
+    await accept_upload(user_id, target["file_id"], target["version_id"], data, content_type)
+    return await complete_upload(user_id, target["file_id"], target["version_id"])
 
 
 async def get_version(user_id: UUID, file_id: UUID, version_id: UUID) -> dict:
@@ -281,6 +345,13 @@ async def delete(user_id: UUID, paths: list[str]) -> dict:
                    RETURNING logical_path""", (user_id, path, start, start),
             )).fetchall()
             deleted.extend(r["logical_path"] for r in rows)
+        await conn.execute(
+            """UPDATE jobs j SET status = 'cancelled', error_code = 'file_deleted',
+                 last_error = 'File was deleted', finished_at = now(), updated_at = now()
+               FROM files f WHERE j.user_id = %s AND f.user_id = j.user_id
+                 AND f.id = j.file_id AND f.deleted_at IS NOT NULL
+                 AND j.status IN ('queued', 'retry_wait')""", (user_id,),
+        )
     # Keep immutable bytes for the retention/cleanup policy in B8.
     await _log(user_id, "storage:delete", {"paths": paths, "count": len(deleted)})
     return {"deleted": sorted(set(deleted))}

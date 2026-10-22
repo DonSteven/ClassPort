@@ -55,4 +55,4 @@ def test_runtime_does_not_receive_maintenance_credentials(tmp_path, maintenance_
         cwd=tmp_path, env=env, capture_output=True, text=True, timeout=20,
     )
     assert result.returncode == 0, result.stderr
-    assert set(result.stdout.split()) == {"classport", "frontend"}
+    assert set(result.stdout.split()) == {"classport", "frontend", "redis", "worker", "dispatcher", "job-recovery"}

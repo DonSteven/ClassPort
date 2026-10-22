@@ -126,6 +126,7 @@ log "=== deploy starting ==="
 [ -f .env ]               || { err ".env missing — backend secrets file";  exit 1; }
 [ -f .env.docker ]        || { err ".env.docker missing — postgres secrets"; exit 1; }
 [ -f .env.migration ]     || { err ".env.migration missing — maintenance credentials"; exit 1; }
+[ -f .env.coordinator ]   || { err ".env.coordinator missing — restricted task coordinator credentials"; exit 1; }
 [ -f Dockerfile ]         || { err "Dockerfile missing"; exit 1; }
 
 log "validating docker-compose.yml..."
@@ -141,6 +142,10 @@ fi
 # ── snapshot rollback target ─────────────────────────────────────────────────
 
 PREV_ID=$(current_image_id || true)
+PREV_FRONTEND_ID=$($COMPOSE images frontend --format '{{.ID}}' 2>/dev/null | head -1 || true)
+if [ -n "$PREV_FRONTEND_ID" ]; then
+    docker tag "$PREV_FRONTEND_ID" classport-frontend:previous
+fi
 if [ -n "${PREV_ID:-}" ]; then
     log "tagging current image $PREV_ID as classport:previous (rollback target)"
     docker tag "$PREV_ID" classport:previous
@@ -207,7 +212,8 @@ fi
 # ── roll forward ─────────────────────────────────────────────────────────────
 
 log "starting new classport + recreating frontend..."
-$COMPOSE up -d classport
+$COMPOSE stop dispatcher job-recovery worker
+$COMPOSE up -d classport redis worker dispatcher job-recovery
 # Force-recreate frontend so it picks up its newly built image — without
 # this, the running frontend container keeps serving the previous build
 # even though `compose build` just produced a fresh image.
@@ -232,15 +238,21 @@ if [ "$NO_ROLLBACK" -eq 1 ]; then
     exit 1
 fi
 
-if [ -z "${PREV_ID:-}" ]; then
-    err "deploy: FAILED — no previous image to roll back to (first-ever deploy?)"
+if [ -z "${PREV_ID:-}" ] || [ -z "${PREV_FRONTEND_ID:-}" ]; then
+    err "deploy: FAILED — no previous image pair to roll back to"
     exit 1
 fi
 
 log "ROLLBACK: re-tagging classport:previous as classport:latest..."
 docker tag classport:previous classport:latest
+docker tag classport-frontend:previous classport-frontend:latest
+$COMPOSE stop dispatcher job-recovery worker
 log "ROLLBACK: recreating classport container..."
-$COMPOSE up -d --force-recreate classport
+if [ "$(docker image inspect --format '{{ index .Config.Labels "org.classport.file-jobs" }}' classport:previous)" = 1 ]; then
+    $COMPOSE up -d --force-recreate classport frontend worker dispatcher job-recovery
+else
+    $COMPOSE up -d --force-recreate classport frontend
+fi
 
 log "ROLLBACK: polling health on restored image..."
 if poll_health; then

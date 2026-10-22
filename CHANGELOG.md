@@ -34,6 +34,13 @@ versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
   is deleted or superseded during extraction. Search excludes stale revisions;
   user-scoped rebuilds report classified per-file failures and require an explicit
   `--all-users` option for an operator-wide rebuild.
+- **Durable background processing.** Queue confirmed uploads and rebuilds
+  in PostgreSQL, dispatch through an outbox and Redis, and process them in
+  independent Celery workers. Track attempts, bounded retries and execution
+  leases, with separate dispatch and recovery processes.
+- **Processing status and operations.** Add user-scoped job lookup and
+  retry APIs plus file-browser processing states. Include workers and restricted
+  coordinators in deployment, rollback, backup, recovery and monitoring.
 
 #### Changed
 

@@ -27,6 +27,7 @@ import {
   useMoveEntry,
   useSyncMaterials,
   useUploadFile,
+  useRetryFileJob,
   type FileEntry,
 } from "@/lib/queries";
 import { fmtDateShort } from "@/lib/time";
@@ -52,6 +53,8 @@ export function FileBrowser({
   const [openPath, setOpenPath] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const upload = useUploadFile();
+  const retryJob = useRetryFileJob();
+  const [uploads, setUploads] = useState<{ name: string; state: "waiting" | "uploading" | "uploaded" | "failed"; error?: string }[]>([]);
   const createFolder = useCreateFolder();
   const deleteEntry = useDeleteEntry();
   const moveEntry = useMoveEntry();
@@ -67,16 +70,32 @@ export function FileBrowser({
     const files = Array.from(e.target.files ?? []);
     e.target.value = "";
     if (files.length === 0) return;
-    for (const file of files) {
+    setUploads(files.map((file) => ({ name: file.name, state: "waiting" })));
+    const update = (index: number, state: "uploading" | "uploaded" | "failed", error?: string) =>
+      setUploads((current) => current.map((entry, i) => i === index ? { ...entry, state, error } : entry));
+    for (const [index, file] of files.entries()) {
       const path = prefix ? `${prefix}/${file.name}` : file.name;
+      update(index, "uploading");
       try {
         await upload.mutateAsync({ file, path });
+        update(index, "uploaded");
         toast.success(t("files.uploadedName", { name: file.name }));
       } catch (err) {
+        update(index, "failed", (err as Error).message);
         toast.error(
           t("files.uploadFailed", { name: file.name, msg: (err as Error).message || "—" })
         );
       }
+    }
+  }
+
+  async function onRetry(entry: FileEntry) {
+    if (!entry.job_id) return;
+    try {
+      await retryJob.mutateAsync(entry.job_id);
+      toast.success(t("files.retryQueued"));
+    } catch (err) {
+      toast.error((err as Error).message);
     }
   }
 
@@ -188,6 +207,17 @@ export function FileBrowser({
           </button>
         )}
       </div>
+
+      {uploads.length > 0 && (
+        <ul className="space-y-1 text-xs text-muted" aria-live="polite">
+          {uploads.map((entry, i) => (
+            <li key={i} className={entry.state === "failed" ? "text-critical" : ""}>
+              {entry.name} · {t(`files.uploadStates.${entry.state}`)}
+              {entry.error && `: ${entry.error}`}
+            </li>
+          ))}
+        </ul>
+      )}
 
       {/* Breadcrumbs + upload */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -329,6 +359,14 @@ export function FileBrowser({
                         {e.updated_at && ` · ${fmtDateShort(e.updated_at)}`}
                       </p>
                     )}
+                    {e.type === "file" && (
+                      <p className={cn("text-xs mt-0.5", e.job_status === "failed" ? "text-critical" : "text-muted")}>
+                        {e.searchable ? t("files.searchable") : e.job_status
+                          ? t(`files.processingStates.${e.job_status}`)
+                          : !e.version_id ? t("files.uploadStates.incomplete") : t("files.notIndexed")}
+                        {e.job_error && ` · ${t(`files.processingErrors.${e.job_error_code}`, { defaultValue: e.job_error })}`}
+                      </p>
+                    )}
                   </div>
                   {e.type === "folder" && <ChevronRight className="h-4 w-4 text-subtle" />}
                 </button>
@@ -343,6 +381,11 @@ export function FileBrowser({
                     </button>
                   </DropdownTrigger>
                   <DropdownContent align="end">
+                    {e.job_can_retry && (
+                      <DropdownItem onSelect={() => onRetry(e)} disabled={retryJob.isPending}>
+                        <RefreshCw className="h-4 w-4" /> {t("files.retryProcessing")}
+                      </DropdownItem>
+                    )}
                     <DropdownItem onSelect={() => onRename(e)}>
                       <Pencil className="h-4 w-4" /> {t("files.renameAction")}
                     </DropdownItem>

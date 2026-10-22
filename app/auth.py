@@ -1,6 +1,5 @@
 import json
 import time
-from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from functools import lru_cache
@@ -16,28 +15,7 @@ from argon2.exceptions import VerifyMismatchError
 from .config import get_settings
 
 
-# ── Per-request user context (RLS plumbing) ────────────────────────────────
-#
-# Phase 4 Task 2: every authed request stamps the resolved user_id into this
-# contextvar. `app.db.db()` reads it on each connection checkout and issues
-# `SET LOCAL app.user_id = ?` inside the implicit transaction, so RLS
-# policies referencing `current_setting('app.user_id', true)::uuid` resolve
-# correctly once prod flips off the bypass role. Inert under bypass.
-_current_user_id: ContextVar[Optional[UUID]] = ContextVar(
-    "current_user_id", default=None
-)
-
-
-def set_current_user_id(user_id: Optional[UUID]) -> None:
-    """Store user_id in the per-request contextvar. Called by `optional_user`
-    / `require_user` after resolving the session. Pass `None` to clear."""
-    _current_user_id.set(user_id)
-
-
-def get_current_user_id() -> Optional[UUID]:
-    """Return the user_id set by the current request, or None if unset.
-    Read by `app.db.db()` to scope the connection's session GUC."""
-    return _current_user_id.get()
+from .user_context import get_current_user_id, set_current_user_id  # noqa: F401
 
 
 @dataclass(frozen=True)

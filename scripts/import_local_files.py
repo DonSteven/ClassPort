@@ -58,6 +58,7 @@ async def import_user(user_id: UUID, source: Path) -> dict:
                 )
                 target = pending or await files.begin_upload(user_id, path)
                 await files.accept_upload(user_id, target["file_id"], target["version_id"], data)
+                await files.complete_upload(user_id, target["file_id"], target["version_id"])
                 if await files.download(user_id, path) != data:
                     raise ValueError("copied content differs from source")
                 report["imported"] += 1

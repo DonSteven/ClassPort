@@ -46,6 +46,7 @@ jobs:
           cp .env.ci .env
           cp .env.docker.example .env.docker
           cp .env.migration.example .env.migration
+          cp .env.coordinator.example .env.coordinator
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

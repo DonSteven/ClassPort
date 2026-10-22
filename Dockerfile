@@ -34,6 +34,7 @@ COPY infra/aws/scripts/bootstrap.py infra/aws/scripts/recovery.py ./release/
 RUN uv sync --frozen --no-dev
 
 EXPOSE 8000
+LABEL org.classport.file-jobs="1"
 
 # Default command — overridden by compose for migrations runs.
 #

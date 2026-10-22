@@ -63,8 +63,10 @@ empty installation can apply the complete migration set directly.
 
 `POST /api/files/upload-url` accepts a logical `path` and returns `file_id`,
 `version_id`, `url` and `headers`. PUT the bytes to that URL under the same user
-session. Local PUT verifies ownership, saves immutable bytes, completes the
-version and advances the current revision in one database transaction. A late
+session. Local PUT verifies ownership and stages immutable bytes. Then call
+`POST /api/files/{file_id}/versions/{version_id}/complete`: it verifies content
+and completes the version, advances the current revision and saves a job/outbox
+notification in one database transaction. Repeated completion returns the same job. A late
 older upload cannot replace a newer completed revision. Reusing a completed PUT
 target returns 409. Retrying an interrupted pending PUT accepts only identical
 already-published bytes.
@@ -96,24 +98,22 @@ unknown versions and missing completed content are not automatically retryable.
 Temporary storage/database failures are retryable. A legitimate document with
 no extracted text is distinct from a parser failure. No OCR is performed.
 
-`index_user(user_id)` enumerates only that user's current completed files and
-calls the same single-file entry point. Non-text materials are skipped during a
-rebuild; directly requesting their indexing reports `unsupported_format`.
-The report contains counts and per-file classified errors. Rebuilds continue
-after a classified file failure. To run maintenance with runtime `DATABASE_URL`
-and `STUDY_ROOT` configured:
+Rebuild requests enumerate only that user's current completed files and create
+individual durable jobs. Non-text materials are skipped by rebuild enumeration;
+an uploaded non-text file's processing job reports `unsupported_format`.
+To enqueue maintenance with runtime `DATABASE_URL` configured:
 
 ```sh
 uv run --no-sync python scripts/index_files.py --user-id USER_UUID
 uv run --no-sync python scripts/index_files.py --all-users
 ```
 
-The command prints a JSON report and exits nonzero if any file failed. Cross-user
+The command prints a JSON report with job IDs and accepted counts. Cross-user
 rebuilds require the explicit `--all-users` operator option. Both existing
 `POST /api/internal/index-files` and `POST /api/internal/sync` require a `user_id`
 query parameter and the internal secret; neither defaults to a global rebuild.
-These endpoints still use process-local background tasks for maintenance. B4/B5
-will replace their execution with persistent job dispatch.
+These endpoints persist work without processing files in the API. Independent
+Celery workers consume database-backed job notifications; see [WORKERS.md](WORKERS.md).
 
 Change `PIPELINE_VERSION` whenever extraction/processing behavior changes. Its
 value is stored on the index, so a changed pipeline reprocesses unchanged file
@@ -123,8 +123,8 @@ version is published with its own reference even when its bytes match v1.
 
 PostgreSQL full-text ranking, snippets and the existing GIN index are retained.
 Search resolves current names and excludes deleted files and indexes for an
-older current version. Web uploads do not yet automatically start indexing;
-durable processing and its UI are connected in B4–B6.
+older current version. Confirmed web uploads automatically queue processing.
+The browser displays task state/errors and offers valid manual retries.
 
 Backups still archive the local root. Restore verification checks every completed
 local version's object reference, including historical and not-yet-indexed files.
