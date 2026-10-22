@@ -22,6 +22,9 @@ versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
   archive course materials under a versioned backup manifest. Verify file
   references and restore the recorded data, image pair and configuration into
   an independent environment, with scheduled backups and recovery smoke checks.
+- **File and job schema.** Introduce user-scoped file records, immutable
+  revisions, processing jobs, attempt history and a transactional outbox, with
+  ownership constraints and uniqueness rules for paths and processing requests.
 
 ### 2026-10-21
 

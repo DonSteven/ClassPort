@@ -187,3 +187,36 @@ This assertion checks the running backend without printing any secret values:
 docker compose --env-file .env.docker exec classport uv run --no-sync python -c \
   'import os; assert "MIGRATION_DATABASE_URL" not in os.environ; assert "POSTGRES_PASSWORD" not in os.environ'
 ```
+
+## File versions and processing jobs: B1 first migration
+
+`20261022000001_file_jobs.sql` adds the file and job records for the first
+stage of B1:
+
+| Table | Responsibility |
+|---|---|
+| `files` | Stable file identity, user, logical path, optional course, current version and soft deletion; `kind=directory` preserves empty folders |
+| `file_versions` | Revision number, storage location, optional object version, size/checksum and upload state |
+| `jobs` | One logical job per file version, job type and pipeline version; status, attempt count, scheduling, lease, execution identity and latest error |
+| `job_attempts` | Separate execution identities, worker, start/end times and errors for successive attempts of the same job |
+| `outbox` | Pending or sent job notifications; rows can be saved in the same transaction as their job |
+
+Composite foreign keys include `user_id` and file identity so current versions,
+indexed versions and jobs cannot point to another user's or another file's
+version. Attempts and notifications must belong to the same user as their job.
+Active logical paths are unique within a user; a soft-deleted path may be reused
+with a new file ID. Runtime access uses the existing ordinary DML/default grants;
+the migration adds no tenant RLS policies or database roles.
+
+The first migration leaves `file_index.file_id` and `file_version_id` nullable
+together. Existing index writes and search remain supported; a referenced index
+is unique per user and file. Files may have no current version during the first
+upload, and directories have none.
+
+This is the data foundation only. The current file APIs and indexer do not yet
+populate these records. B2 must import and verify existing files, including their
+content against any old index, before a second migration makes index references
+mandatory. Deliver that second migration after the import: the migration runner
+applies all pending SQL files in one batch and does not pause for backfills.
+Version bytes become immutable through the B2 storage implementation; persistent
+execution, retry and outbox dispatch are connected in B4/B5.
