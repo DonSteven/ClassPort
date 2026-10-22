@@ -8,6 +8,7 @@ gmail_smtp — stdlib smtplib.SMTP_SSL to smtp.gmail.com:465.
 Backend selection: EMAIL_BACKEND env var (default "console").
 """
 import asyncio
+import logging
 import smtplib
 import ssl
 from email.message import EmailMessage
@@ -17,6 +18,7 @@ from typing import Awaitable, Callable
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
 from app.config import get_settings
+from app.logging_config import operation
 
 # ── Jinja2 environment ────────────────────────────────────────────────────────
 
@@ -55,10 +57,7 @@ async def _console_backend(
         "from_name": from_name,
     }
     _console_outbox.append(record)
-    print(
-        f"[email:console] to={to!r} subject={subject!r} "
-        f"text_len={len(body_text)} html={'yes' if body_html else 'no'}"
-    )
+    logging.getLogger(__name__).info("email.console", extra={"event": "email.console", "stage": "external.email"})
 
 
 # ── Gmail SMTP backend ────────────────────────────────────────────────────────
@@ -94,7 +93,8 @@ async def _gmail_smtp_backend(
 
     # Run the blocking smtplib call in a thread pool to avoid blocking the
     # asyncio event loop.
-    await asyncio.get_event_loop().run_in_executor(None, _send)
+    with operation("external.email"):
+        await asyncio.get_event_loop().run_in_executor(None, _send)
 
 
 # ── Backend registry ──────────────────────────────────────────────────────────

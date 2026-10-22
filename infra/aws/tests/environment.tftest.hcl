@@ -171,3 +171,29 @@ run "domain_can_be_unconfigured" {
     error_message = "No configured domain means no ACME certificate requests or public application proxy."
   }
 }
+
+run "operations_and_recovery_are_scoped" {
+  command = plan
+  variables {
+    operations_email = "alerts@example.test"
+  }
+  assert {
+    condition = (
+      length(aws_cloudwatch_metric_alarm.operations) == 4 &&
+      aws_cloudwatch_metric_alarm.operations["backup_overdue"].threshold == 93600 &&
+      aws_cloudwatch_metric_alarm.operations["api_unavailable"].treat_missing_data == "breaching" &&
+      aws_sns_topic_subscription.operations_email[0].protocol == "email" &&
+      aws_sns_topic_subscription.operations_email[0].endpoint == var.operations_email
+    )
+    error_message = "Operations must detect missing metrics and overdue backups and use the chosen email subscription."
+  }
+  assert {
+    condition = (
+      !strcontains(aws_iam_role_policy.app.policy, "s3:GetObject") &&
+      strcontains(aws_iam_policy.recovery.policy, "s3:GetObjectVersion") &&
+      strcontains(aws_iam_policy.recovery.policy, "s3:ListBucketVersions") &&
+      strcontains(aws_iam_role_policy.app.policy, "cloudwatch:namespace")
+    )
+    error_message = "Source backup writes, recovery reads and namespaced metrics must retain separate permissions."
+  }
+}

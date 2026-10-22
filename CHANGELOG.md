@@ -14,6 +14,14 @@ versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
   verify the image pair, and deploy through SSM using short-lived GitHub OIDC
   credentials. Bootstrap roles and migrations in a maintenance container, retain
   structured deployment results, and restore the previous release on failure.
+- **Request tracing and monitoring.** Correlate structured HTTP, database,
+  storage and external-call logs through `X-Request-ID`, excluding credentials
+  and request payloads. Add readiness, disk, backup and HTTP-error monitoring
+  with CloudWatch alarms.
+- **Consistent backup and recovery.** Pause writers, export PostgreSQL and
+  archive course materials under a versioned backup manifest. Verify file
+  references and restore the recorded data, image pair and configuration into
+  an independent environment, with scheduled backups and recovery smoke checks.
 
 ### 2026-10-21
 

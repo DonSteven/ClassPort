@@ -177,7 +177,7 @@ async def _per_request_mcp_app(scope, receive, send) -> None:
         # Log server-side, never echo the traceback to the client (it can
         # leak internal paths, DSN fragments, env values that wound up in
         # error messages, etc.).
-        log.exception("MCP handler error (per-request)")
+        log.exception("mcp.failed", extra={"event": "mcp.failed", "stage": "mcp"})
         body = b"MCP handler error. Server-side details have been logged."
         try:
             await send(

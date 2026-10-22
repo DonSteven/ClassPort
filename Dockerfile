@@ -28,7 +28,7 @@ COPY app ./app
 COPY scripts ./scripts
 COPY migrations ./migrations
 COPY docker-compose.prod.yml deploy-prod.sh ./release/
-COPY infra/aws/scripts/bootstrap.py ./release/bootstrap.py
+COPY infra/aws/scripts/bootstrap.py infra/aws/scripts/recovery.py ./release/
 
 # Final install (in case pyproject changed locally).
 RUN uv sync --frozen --no-dev
@@ -47,4 +47,4 @@ EXPOSE 8000
 # frontend container Caddy is the only thing that sets these headers.
 CMD ["uv", "run", "--no-sync", "uvicorn", "app.main:app", \
      "--host", "0.0.0.0", "--port", "8000", \
-     "--proxy-headers", "--forwarded-allow-ips", "*"]
+     "--proxy-headers", "--forwarded-allow-ips", "*", "--no-access-log"]

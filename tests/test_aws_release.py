@@ -53,6 +53,7 @@ elif args[0] == 'cp':
     for name in ('docker-compose.prod.yml', 'deploy-prod.sh'):
         shutil.copy(repo / name, destination / name)
     shutil.copy(repo / 'infra/aws/scripts/bootstrap.py', destination / 'bootstrap.py')
+    shutil.copy(repo / 'infra/aws/scripts/recovery.py', destination / 'recovery.py')
 elif args[0] == 'run':
     target = root / args[-1].removeprefix('/deployment/')
     target.write_text(json.dumps({'status': 'failed' if failure == 'migration' else 'succeeded',
@@ -116,6 +117,8 @@ def test_aws_release_uses_image_files_and_records_every_reachable_failure(aws_ho
         assert not starts and not (root / "releases/current").exists()
     elif not failure:
         assert report["application"]["current_release"] == report["manifest"]
+        assert (root / "releases/current/recovery.py").is_file()
+        assert (root / "releases/current/bootstrap.py").is_file()
         assert all(status == "succeeded" for status in report["steps"].values())
     else:
         assert report["application"]["rollback"] == "no_previous_release"

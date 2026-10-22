@@ -80,3 +80,48 @@ caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 docker compose version
 touch /opt/classport/.host-ready
 echo "Host ready. Supply the application secret and publish an ECR image pair before classport-release."
+
+# Versioned helpers become available after the first A8 release.
+cat > /etc/systemd/system/classport-backup.service <<'EOF'
+[Unit]
+Description=Consistent ClassPort database and course backup
+After=docker.service network-online.target
+RequiresMountsFor=/opt/classport/data
+[Service]
+Type=oneshot
+UMask=0077
+ExecCondition=/usr/bin/test -f /opt/classport/releases/current/recovery.py
+ExecStart=/usr/bin/python3 /opt/classport/releases/current/recovery.py backup
+TimeoutStartSec=infinity
+EOF
+cat > /etc/systemd/system/classport-backup.timer <<'EOF'
+[Unit]
+Description=Daily ClassPort maintenance backup
+[Timer]
+OnCalendar=*-*-* 03:00:00 America/New_York
+Persistent=true
+[Install]
+WantedBy=timers.target
+EOF
+cat > /etc/systemd/system/classport-monitor.service <<'EOF'
+[Unit]
+Description=ClassPort readiness, backup and disk metrics
+After=docker.service network-online.target
+[Service]
+Type=oneshot
+UMask=0077
+ExecCondition=/usr/bin/test -f /opt/classport/releases/current/recovery.py
+ExecStart=/usr/bin/python3 /opt/classport/releases/current/recovery.py monitor
+TimeoutStartSec=90
+EOF
+cat > /etc/systemd/system/classport-monitor.timer <<'EOF'
+[Unit]
+Description=Check ClassPort operations every minute
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+[Install]
+WantedBy=timers.target
+EOF
+systemctl daemon-reload
+systemctl enable --now classport-backup.timer classport-monitor.timer

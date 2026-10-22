@@ -211,11 +211,17 @@ failure semantics and timeout handling.
 Emergency rollback uses the saved previous image pair; follow the authenticated
 SSM procedure in [Production delivery](../../docs/PRODUCTION.md#emergency-rollback).
 
-RDS keeps seven days of automated backups. The S3 backup bucket is private,
-versioned, encrypted and HTTPS-only. The instance can upload backup objects but
-cannot read/delete them. This change creates the destination; it does not schedule
-file backups or copy RDS backups to S3. Set a backup/recovery procedure appropriate
-to your data before relying on this installation for irreplaceable files.
+RDS keeps seven days of automated backups. The private, encrypted, versioned S3
+bucket stores consistent database exports, course archives and their manifest.
+The host has upload-only backup access; the separate `recovery_policy_arn` can be
+attached to an approved isolated recovery identity. A8's versioned `recovery.py`
+implements backup, restore and lightweight disk/readiness/backup-age metrics.
+The daily backup timer runs at 03:00 America/New_York after the A8 host update;
+monitoring runs every minute. Backups pause services throughout export/upload.
+Review and approve host changes and this maintenance window before activation.
+Subscribe the approved notification destination to `operations_topic_arn` and
+verify delivery.
+Local tests do not establish that scheduled backups or AWS restores work online.
 
 EBS is separate from EC2 and has `prevent_destroy`; Docker requires its mount
 before starting on reboot. On initial boot only an unsigned empty disk matching

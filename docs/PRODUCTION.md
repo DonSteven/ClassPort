@@ -136,3 +136,4 @@ release. Before accepting A7, run the GitHub workflow against AWS, verify its
 recorded digests match the running containers, confirm HTTPS/login/REST/MCP
 checks, and exercise the changed failure/recovery path. Keep the resulting run
 and command records as acceptance evidence.
+

@@ -15,6 +15,7 @@ import os
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, status
 
 from ..auth import set_current_user_id
+from ..logging_config import operation
 from ..services import file_index as file_index_svc
 from ..services import telegram as telegram_svc
 from ..services import user_secrets as user_secrets_svc
@@ -39,10 +40,11 @@ async def _reindex() -> None:
     BackgroundTasks accepts both sync and async callables — making this
     `async def` lets it await the now-async `index_all()` directly."""
     try:
-        stats = await file_index_svc.index_all()
-        log.info("file_index reindex done: %s", stats)
-    except Exception as e:
-        log.exception("file_index reindex failed: %s", e)
+        with operation("index.run"):
+            stats = await file_index_svc.index_all()
+        log.info("index.completed", extra={"event": "index.completed", "stage": "index", **stats})
+    except Exception:
+        log.exception("index.failed", extra={"event": "index.failed", "stage": "index"})
 
 
 @router.post("/sync")

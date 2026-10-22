@@ -54,6 +54,8 @@ locals {
     "BACKEND_REPOSITORY=${aws_ecr_repository.images["backend"].repository_url}",
     "FRONTEND_REPOSITORY=${aws_ecr_repository.images["frontend"].repository_url}",
     "DATA_VOLUME_ID=${aws_ebs_volume.data.id}",
+    "BACKUP_BUCKET=${aws_s3_bucket.backups.id}",
+    "ENVIRONMENT=${var.name}",
     "", # trailing newline
   ])
   cloud_init = templatefile("${path.module}/cloud-init.yaml", {

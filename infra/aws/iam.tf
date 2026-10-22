@@ -45,6 +45,11 @@ resource "aws_iam_role_policy" "app" {
         Sid      = "WriteBackups", Effect = "Allow"
         Action   = ["s3:PutObject", "s3:AbortMultipartUpload"]
         Resource = "${aws_s3_bucket.backups.arn}/*"
+      },
+      {
+        Sid       = "OperationalMetrics", Effect = "Allow"
+        Action    = ["cloudwatch:PutMetricData"], Resource = "*"
+        Condition = { StringEquals = { "cloudwatch:namespace" = "ClassPort/Operations" } }
       }
     ]
   })

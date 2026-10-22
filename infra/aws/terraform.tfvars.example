@@ -8,6 +8,9 @@ name        = "classport-prod"
 
 # Defaults: t3.small EC2, 30 GiB gp3 data disk, db.t4g.micro PostgreSQL 16,
 # single AZ, 7 days of RDS backups, 14 days of container logs, no NAT gateway.
+
+# Applying an email subscription sends a confirmation email; confirm it to receive alerts.
+operations_email = null
 # Never put credentials or secret values in this file.
 
 # Copy the repository's actual OIDC subject; include owner/repository IDs if used.

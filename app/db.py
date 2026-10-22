@@ -10,7 +10,7 @@ or cursor-level control, `async with db() as conn:` checks one out.
 """
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Any
 
 import uuid as _uuid
@@ -21,6 +21,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
 from .db_config import get_pool_config, get_runtime_dsn
+from .logging_config import operation
 
 
 # ── new async pool ────────────────────────────────────────────────────────────
@@ -132,19 +133,17 @@ async def db():
     # Local import avoids a circular: app.auth imports `from . import db`.
     from .auth import get_current_user_id
 
-    async with pool().connection() as conn:
-        user_id = get_current_user_id()
-        if user_id is not None:
-            async with conn.cursor() as cur:
-                # `SET LOCAL <name> = <value>` is a utility statement that
-                # doesn't accept query parameters, so we use the equivalent
-                # `set_config(name, value, is_local=true)` function which
-                # does. The `true` third arg = transaction-local (=LOCAL).
-                await cur.execute(
-                    "SELECT set_config('app.user_id', %s, true)",
-                    (str(user_id),),
-                )
-        yield conn
+    with operation("database.transaction"):
+        async with AsyncExitStack() as stack:
+            with operation("database.acquire"):
+                conn = await stack.enter_async_context(pool().connection())
+            user_id = get_current_user_id()
+            if user_id is not None:
+                async with conn.cursor() as cur:
+                    await cur.execute(
+                        "SELECT set_config('app.user_id', %s, true)", (str(user_id),)
+                    )
+            yield conn
 
 
 # ── helper API ────────────────────────────────────────────────────────────────
@@ -152,30 +151,34 @@ async def db():
 async def fetch(sql: str, *args: Any) -> list[dict[str, Any]]:
     """SELECT returning multiple rows. Returns list of dicts."""
     async with db() as conn, conn.cursor() as cur:
-        await cur.execute(sql, args or None)
-        return await cur.fetchall()
+        with operation("database.query"):
+            await cur.execute(sql, args or None)
+            return await cur.fetchall()
 
 
 async def fetchrow(sql: str, *args: Any) -> dict[str, Any] | None:
     """SELECT returning one row (or None). Returns dict or None."""
     async with db() as conn, conn.cursor() as cur:
-        await cur.execute(sql, args or None)
-        return await cur.fetchone()
+        with operation("database.query"):
+            await cur.execute(sql, args or None)
+            return await cur.fetchone()
 
 
 async def fetchval(sql: str, *args: Any) -> Any:
     """SELECT returning one scalar (or None). Returns the first column of the first row."""
     async with db() as conn, conn.cursor() as cur:
-        await cur.execute(sql, args or None)
-        row = await cur.fetchone()
-        if row is None:
-            return None
-        # row is a dict (dict_row factory) — return its first value
-        return next(iter(row.values()))
+        with operation("database.query"):
+            await cur.execute(sql, args or None)
+            row = await cur.fetchone()
+            if row is None:
+                return None
+            # row is a dict (dict_row factory) — return its first value
+            return next(iter(row.values()))
 
 
 async def execute(sql: str, *args: Any) -> int:
     """INSERT/UPDATE/DELETE. Returns affected row count."""
     async with db() as conn, conn.cursor() as cur:
-        await cur.execute(sql, args or None)
-        return cur.rowcount
+        with operation("database.query"):
+            await cur.execute(sql, args or None)
+            return cur.rowcount

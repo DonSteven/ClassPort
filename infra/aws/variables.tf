@@ -3,6 +3,16 @@ variable "aws_region" {
   default = "us-east-1"
 }
 
+variable "operations_email" {
+  description = "Optional operations email. Applying it sends an SNS subscription confirmation."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.operations_email == null || can(regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$", var.operations_email))
+    error_message = "Provide a notification email address or null."
+  }
+}
+
 variable "name" {
   description = "Unique environment name in this account/region. Also used in AWS resource names."
   type        = string

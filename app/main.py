@@ -10,6 +10,9 @@ from fastapi.responses import JSONResponse
 
 from . import db as db_module
 from .config import get_settings
+from .logging_config import RequestLoggingMiddleware, configure_logging, operation
+
+configure_logging()
 
 # Single source of truth for the running app's version: pyproject.toml.
 # Read directly rather than via importlib.metadata because uv's project
@@ -95,17 +98,6 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Reset the per-request user-id contextvar at the start of every request.
-    # FastAPI deps run in a per-request task copy of the parent context, so
-    # leakage between requests is normally impossible — but if uvicorn ever
-    # reuses a task (or in test-client edge cases) a stale value could carry
-    # over. This middleware is belt-and-suspenders defense.
-    @app.middleware("http")
-    async def _reset_user_ctx(request, call_next):
-        from .auth import set_current_user_id
-        set_current_user_id(None)
-        return await call_next(request)
-
     @app.get("/api/health/live")
     async def live() -> JSONResponse:
         return JSONResponse({"ok": True, "version": APP_VERSION})
@@ -121,10 +113,12 @@ def create_app() -> FastAPI:
         try:
             # One budget covers pool acquisition, the query, and storage I/O.
             async with asyncio.timeout(READINESS_TIMEOUT_SECONDS):
-                await db_module.fetchval("SELECT 1")
+                with operation("readiness.database"):
+                    await db_module.fetchval("SELECT 1")
                 out["db"] = "ok"
                 dependency = "storage"
-                await storage_svc.check_readable()
+                with operation("readiness.storage"):
+                    await storage_svc.check_readable()
                 out["storage"] = "ok"
                 out["ok"] = True
         except TimeoutError:
@@ -158,6 +152,7 @@ def create_app() -> FastAPI:
     # MCP Streamable HTTP endpoint at /mcp (auth-gated by the OAuth Bearer token).
     app.mount("/mcp", mcp_app)
 
+    app.add_middleware(RequestLoggingMiddleware)
     return app
 
 

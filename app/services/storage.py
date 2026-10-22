@@ -36,6 +36,7 @@ from urllib.parse import quote
 from uuid import UUID
 
 from ..schemas import EventCreate
+from ..logging_config import operation
 from . import events as events_svc
 
 log = logging.getLogger(__name__)
@@ -53,7 +54,8 @@ def _check_readable_sync() -> None:
 
 async def check_readable() -> None:
     """Verify STUDY_ROOT can be listed without writing files or audit events."""
-    await asyncio.to_thread(_check_readable_sync)
+    with operation("storage.check_readable"):
+        await asyncio.to_thread(_check_readable_sync)
 
 
 def _user_root(user_id: UUID) -> Path:
@@ -118,7 +120,7 @@ async def _log(user_id: UUID, kind: str, payload: dict[str, Any]) -> None:
             EventCreate(kind=kind, course_code=course_code, payload=payload),
         )
     except Exception:
-        pass
+        log.exception("storage.audit.failed", extra={"event": "storage.audit.failed", "stage": "storage.audit"})
 
 
 def _mtime_iso(p: Path) -> str:
@@ -145,6 +147,7 @@ def _list_files_sync(user_id: UUID, prefix: str, limit: int) -> list[dict[str, A
             key=lambda p: p.name.lower(),
         )
     except OSError:
+        log.exception("storage.list.failed", extra={"event": "storage.list.failed", "stage": "storage.list"})
         return []
 
     for child in entries[:limit]:
@@ -242,7 +245,7 @@ def _delete_sync(user_id: UUID, paths: list[str]) -> list[str]:
                 target.unlink()
                 deleted.append(p)
             except OSError as e:
-                log.warning("delete failed for %s: %s", p, e)
+                log.warning("storage.delete.failed", extra={"event": "storage.delete.failed", "stage": "storage.delete", "error_type": type(e).__name__})
         elif target.is_dir():
             # safety: only allow rmtree on empty dirs here; recursive deletes
             # come through delete folder via the router which lists first.
@@ -274,7 +277,8 @@ async def list_files(user_id: UUID, prefix: str = "", *, limit: int = 200) -> li
     can distinguish them from files without an extra stat call. Dotfiles
     (anything starting with `.`) are filtered out of listings.
     """
-    out = await asyncio.to_thread(_list_files_sync, user_id, prefix, limit)
+    with operation("storage.list_files"):
+        out = await asyncio.to_thread(_list_files_sync, user_id, prefix, limit)
     await _log(user_id, "storage:list", {"prefix": prefix, "count": len(out)})
     return out
 
@@ -282,23 +286,27 @@ async def list_files(user_id: UUID, prefix: str = "", *, limit: int = 200) -> li
 async def list_recursive(user_id: UUID, prefix: str) -> list[str]:
     """Return every file path (relative to the user's root) under `prefix`,
     descending into subfolders. Skips dotfiles."""
-    return await asyncio.to_thread(_list_recursive_sync, user_id, prefix)
+    with operation("storage.list_recursive"):
+        return await asyncio.to_thread(_list_recursive_sync, user_id, prefix)
 
 
 async def download(user_id: UUID, path: str) -> bytes:
     """Return raw bytes of a file."""
-    data = await asyncio.to_thread(_download_sync, user_id, path)
+    with operation("storage.download"):
+        data = await asyncio.to_thread(_download_sync, user_id, path)
     await _log(user_id, "storage:read", {"path": path, "size": len(data)})
     return data
 
 
 async def exists(user_id: UUID, path: str) -> bool:
-    return await asyncio.to_thread(_exists_sync, user_id, path)
+    with operation("storage.exists"):
+        return await asyncio.to_thread(_exists_sync, user_id, path)
 
 
 async def stat(user_id: UUID, path: str) -> dict[str, Any] | None:
     """Return file metadata or None if the path doesn't exist."""
-    return await asyncio.to_thread(_stat_sync, user_id, path)
+    with operation("storage.stat"):
+        return await asyncio.to_thread(_stat_sync, user_id, path)
 
 
 # ── Write ────────────────────────────────────────────────────────────────────
@@ -306,14 +314,16 @@ async def stat(user_id: UUID, path: str) -> dict[str, Any] | None:
 
 async def upload(user_id: UUID, path: str, data: bytes, content_type: str = "application/octet-stream") -> dict[str, Any]:
     """Write (or overwrite) a file. Atomic via tmp+rename within the same dir."""
-    await asyncio.to_thread(_upload_sync, user_id, path, data)
+    with operation("storage.upload"):
+        await asyncio.to_thread(_upload_sync, user_id, path, data)
     await _log(user_id, "storage:upload", {"path": path, "size": len(data), "content_type": content_type})
     return {"path": path, "size": len(data), "content_type": content_type}
 
 
 async def delete(user_id: UUID, paths: list[str]) -> dict[str, Any]:
     """Delete one or more files. Missing paths are silently OK (idempotent)."""
-    deleted = await asyncio.to_thread(_delete_sync, user_id, paths)
+    with operation("storage.delete"):
+        deleted = await asyncio.to_thread(_delete_sync, user_id, paths)
     await _log(user_id, "storage:delete", {"paths": paths, "count": len(deleted)})
     return {"deleted": deleted}
 
@@ -351,6 +361,7 @@ async def signed_upload_url(user_id: UUID, path: str) -> dict[str, Any]:
 async def move(user_id: UUID, source: str, destination: str) -> dict[str, Any]:
     """Rename or move a file. Cross-directory moves work as long as both
     sides are under the user's root."""
-    await asyncio.to_thread(_move_sync, user_id, source, destination)
+    with operation("storage.move"):
+        await asyncio.to_thread(_move_sync, user_id, source, destination)
     await _log(user_id, "storage:move", {"from": source, "to": destination})
     return {"from": source, "to": destination}

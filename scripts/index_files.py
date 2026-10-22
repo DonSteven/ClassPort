@@ -18,7 +18,9 @@ from pathlib import Path
 _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE.parent))
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+from app.logging_config import configure_logging  # noqa: E402
+
+configure_logging()
 
 from app import db  # noqa: E402
 from app.services.file_index import index_all  # noqa: E402
@@ -34,4 +36,4 @@ async def _main() -> dict:
 
 if __name__ == "__main__":
     stats = asyncio.run(_main())
-    print(f"indexer done: {stats}")
+    logging.getLogger(__name__).info("index.completed", extra={"event": "index.completed", **stats})

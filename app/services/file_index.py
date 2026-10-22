@@ -15,6 +15,8 @@ import asyncio
 import hashlib
 import json
 import logging
+
+from ..logging_config import operation
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -48,16 +50,16 @@ def _extract_text(path: str, data: bytes) -> str | None:
     if path.endswith(".pdf"):
         try:
             import fitz  # pymupdf
-        except ImportError as e:
-            log.error("pymupdf not installed: %s", e)
+        except ImportError:
+            log.error("index.failed", extra={"event": "index.failed", "stage": "index.extract"}, exc_info=True)
             return None
         try:
             doc = fitz.open(stream=data, filetype="pdf")
             chunks = [page.get_text() for page in doc]
             doc.close()
             return "\n".join(chunks)
-        except Exception as e:
-            log.warning("PDF extract failed for %s: %s", path, e)
+        except Exception:
+            log.warning("index.failed", extra={"event": "index.failed", "stage": "index.extract"}, exc_info=True)
             return None
     if path.endswith((".md", ".txt", ".typ")):
         try:
@@ -76,8 +78,8 @@ def _extract_text(path: str, data: bytes) -> str | None:
                 else:
                     parts.append(str(src))
             return "\n\n".join(parts)
-        except Exception as e:
-            log.warning("ipynb parse failed for %s: %s", path, e)
+        except Exception:
+            log.warning("index.failed", extra={"event": "index.failed", "stage": "index.extract"}, exc_info=True)
             return None
     return None
 
@@ -123,8 +125,8 @@ async def index_all() -> dict[str, Any]:
         )
         for row in rows:
             existing[row["path"]] = row.get("sha256") or ""
-    except Exception as e:
-        log.warning("could not preload existing rows (table may not exist yet): %s", e)
+    except Exception:
+        log.warning("index.failed", extra={"event": "index.failed", "stage": "index.database"}, exc_info=True)
 
     indexed = 0
     skipped = 0
@@ -135,8 +137,8 @@ async def index_all() -> dict[str, Any]:
     for user_id in user_ids:
         try:
             user_paths = await storage_svc.list_recursive(user_id, "")
-        except Exception as e:
-            log.warning("list_recursive failed for user %s: %s", user_id, e)
+        except Exception:
+            log.warning("index.failed", extra={"event": "index.failed", "stage": "index.read"}, exc_info=True)
             continue
         total_seen += len(user_paths)
         prefix = f"{user_id}/"
@@ -149,9 +151,10 @@ async def index_all() -> dict[str, Any]:
                 skipped += 1
                 continue
             try:
-                data = await storage_svc.download(user_id, path)
-            except Exception as e:
-                log.warning("download failed %s: %s", full_path, e)
+                with operation("index.read"):
+                    data = await storage_svc.download(user_id, path)
+            except Exception:
+                log.warning("index.failed", extra={"event": "index.failed", "stage": "index.read"}, exc_info=True)
                 failed += 1
                 continue
             sha = hashlib.sha256(data).hexdigest()
@@ -162,7 +165,8 @@ async def index_all() -> dict[str, Any]:
             # hundreds of ms per page). Run it on the threadpool so a
             # large reindex doesn't block the asyncio event loop and stall
             # every other request — health check, dashboard, MCP, OAuth.
-            text = await asyncio.to_thread(_extract_text, path, data)
+            with operation("index.extract"):
+                text = await asyncio.to_thread(_extract_text, path, data)
             if text is None:
                 failed += 1
                 continue
@@ -189,8 +193,8 @@ async def index_all() -> dict[str, Any]:
                     datetime.now(timezone.utc),
                 )
                 indexed += 1
-            except Exception as e:
-                log.warning("upsert failed for %s: %s", full_path, e)
+            except Exception:
+                log.warning("index.failed", extra={"event": "index.failed", "stage": "index.database"}, exc_info=True)
                 failed += 1
 
     # Drop rows whose paths no longer exist on disk
@@ -202,8 +206,8 @@ async def index_all() -> dict[str, Any]:
                 stale,
             )
             pruned += 1
-    except Exception as e:
-        log.warning("prune phase failed: %s", e)
+    except Exception:
+        log.warning("index.failed", extra={"event": "index.failed", "stage": "index.database"}, exc_info=True)
 
     return {
         "indexed": indexed,
@@ -252,8 +256,8 @@ async def search(user_id: UUID, q: str, limit: int = 20) -> list[dict[str, Any]]
             """,
             q.strip(), user_id, limit,
         )
-    except Exception as e:
-        log.warning("search query failed: %s", e)
+    except Exception:
+        log.warning("index.failed", extra={"event": "index.failed", "stage": "index.database"}, exc_info=True)
         return []
 
     prefix = f"{user_id}/"

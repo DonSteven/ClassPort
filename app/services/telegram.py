@@ -6,6 +6,8 @@ commands operate on the caller's data.  handle_command sources the bot
 token from user_secrets (no env fallback — multi-tenant safety).
 """
 import logging
+
+from ..logging_config import operation
 import os
 from pathlib import Path
 from typing import Optional
@@ -26,10 +28,11 @@ PAUSE_FLAG = Path(os.environ.get("STUDY_ROOT", "/opt/courses")) / ".materials_cr
 async def send_message(token: str, chat_id: int, text: str) -> None:
     """Send a Telegram message via sendMessage API."""
     async with httpx.AsyncClient(timeout=10) as client:
-        await client.post(
-            f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat_id, "text": text, "disable_web_page_preview": True},
-        )
+        with operation("external.telegram"):
+            await client.post(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                json={"chat_id": chat_id, "text": text, "disable_web_page_preview": True},
+            )
 
 
 # Private alias used internally.
@@ -98,7 +101,8 @@ async def handle_command(text: str, chat_id: int, user_id: Optional[UUID] = None
             await _send_telegram(token, chat_id, "\U0001f504 Syncing materials…")
         try:
             async with httpx.AsyncClient(timeout=120) as client:
-                resp = await client.get(webhook_url)
+                with operation("external.materials"):
+                    resp = await client.get(webhook_url)
             if resp.status_code >= 400:
                 return f"❌ Sync webhook returned HTTP {resp.status_code}"
         except Exception as exc:

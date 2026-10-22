@@ -32,7 +32,7 @@ def test_release_images_serve_login_api_and_mcp():
         assert revision == expected_commit
     subprocess.run(
         ["docker", "run", "--rm", "--entrypoint", "sh", BACKEND, "-ec",
-         "test -f /app/release/docker-compose.prod.yml && test -f /app/release/deploy-prod.sh && test -f /app/release/bootstrap.py"],
+         "test -f /app/release/docker-compose.prod.yml && test -f /app/release/deploy-prod.sh && test -f /app/release/bootstrap.py && test -f /app/release/recovery.py && test -f /app/scripts/smoke_restore.py"],
         check=True,
     )
     password = "disposable-image-check-password"

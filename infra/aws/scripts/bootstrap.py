@@ -45,7 +45,7 @@ def validate_config(config):
 def database_url(user, password):
     return (
         f"postgresql://{quote(user, safe='')}:{quote(password, safe='')}"
-        f"@{os.environ['DB_HOST']}:5432/{os.environ['DB_NAME']}"
+        f"@{os.environ['DB_HOST']}:{os.environ.get('DB_PORT', '5432')}/{os.environ['DB_NAME']}"
     )
 
 
@@ -125,6 +125,23 @@ def seed_smoke(migration_dsn, config):
         )
 
 
+def configure_runtime(config, root):
+    tls = {"PGSSLMODE": "verify-full", "PGSSLROOTCERT": "/etc/classport/certs/global-bundle.pem", "PGCONNECT_TIMEOUT": "5"}
+    write_env(root / ".env", {
+        **tls, "DATABASE_URL": database_url("classport_app", config["APP_DB_PASSWORD"]),
+        "SESSION_SECRET": config["SESSION_SECRET"],
+        "SECRETS_ENCRYPTION_KEY": config["SECRETS_ENCRYPTION_KEY"],
+        "PUBLIC_URL": os.environ["PUBLIC_URL"], "CORS_ORIGINS": os.environ["PUBLIC_URL"],
+        "OPERATOR_EMAIL": config["OPERATOR_EMAIL"].strip().lower(), "OPERATOR_USER_ID": OPERATOR_ID,
+        "SIGNUPS_ENABLED": "false",
+    })
+    write_env(root / ".env.smoke", {
+        "SMOKE_BASE_URL": os.environ["PUBLIC_URL"], "SMOKE_EMAIL": config["SMOKE_EMAIL"].strip().lower(),
+        "SMOKE_PASSWORD": config["SMOKE_PASSWORD"], "SMOKE_MCP_TOKEN": config["SMOKE_MCP_TOKEN"],
+    })
+    (root / ".env.migration").unlink(missing_ok=True)
+
+
 def bootstrap(config, master, root, result_path):
     report = {"started_at": datetime.now(timezone.utc).isoformat(), "status": "running",
               "steps": {name: "pending" for name in ("validation", "roles", "migration", "runtime_grants", "accounts", "configuration")}}
@@ -177,22 +194,7 @@ def bootstrap(config, master, root, result_path):
 
     step("accounts", accounts)
 
-    def configuration():
-        write_env(root / ".env", {
-            **tls, "DATABASE_URL": database_url("classport_app", config["APP_DB_PASSWORD"]),
-            "SESSION_SECRET": config["SESSION_SECRET"],
-            "SECRETS_ENCRYPTION_KEY": config["SECRETS_ENCRYPTION_KEY"],
-            "PUBLIC_URL": os.environ["PUBLIC_URL"], "CORS_ORIGINS": os.environ["PUBLIC_URL"],
-            "OPERATOR_EMAIL": maintenance["OPERATOR_EMAIL"], "OPERATOR_USER_ID": OPERATOR_ID,
-            "SIGNUPS_ENABLED": "false",
-        })
-        write_env(root / ".env.smoke", {
-            "SMOKE_BASE_URL": os.environ["PUBLIC_URL"], "SMOKE_EMAIL": config["SMOKE_EMAIL"].strip().lower(),
-            "SMOKE_PASSWORD": config["SMOKE_PASSWORD"], "SMOKE_MCP_TOKEN": config["SMOKE_MCP_TOKEN"],
-        })
-        (root / ".env.migration").unlink(missing_ok=True)
-
-    step("configuration", configuration)
+    step("configuration", lambda: configure_runtime(config, root))
     report.update(status="succeeded", finished_at=datetime.now(timezone.utc).isoformat())
     save()
     print("AWS database identities, operator and release checks are ready.")
@@ -200,17 +202,34 @@ def bootstrap(config, master, root, result_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--result-file", type=Path, required=True)
+    parser.add_argument("--result-file", type=Path)
+    parser.add_argument("--recovery-phase", choices=["roles", "configure"])
     arguments = parser.parse_args()
     try:
-        bootstrap(
-            json.loads(Path("/run/secrets/application.json").read_text()),
-            json.loads(Path("/run/secrets/database.json").read_text()),
-            Path("/deployment"),
-            arguments.result_file,
-        )
+        config = json.loads(Path("/run/secrets/application.json").read_text())
+        master = json.loads(Path("/run/secrets/database.json").read_text())
+        if arguments.recovery_phase:
+            validate_config(config)
+            os.environ.update(PGSSLMODE="verify-full", PGSSLROOTCERT="/etc/classport/certs/global-bundle.pem")
+            admin_dsn = database_url(master["username"], master["password"])
+            migration_dsn = database_url("classport_migrator", config["MIGRATION_DB_PASSWORD"])
+            if arguments.recovery_phase == "roles":
+                provision_roles(admin_dsn, config)
+            else:
+                # Verify the original key against every stored encrypted value.
+                with psycopg.connect(migration_dsn) as conn:
+                    for row in conn.execute("SELECT telegram_bot_token_enc, telegram_webhook_secret_enc FROM user_secrets"):
+                        for value in row:
+                            if value is not None:
+                                Fernet(config["SECRETS_ENCRYPTION_KEY"].encode()).decrypt(bytes(value))
+                grant_runtime_access(migration_dsn)
+                configure_runtime(config, Path("/deployment"))
+        else:
+            if arguments.result_file is None:
+                parser.error("--result-file is required for normal database initialization")
+            bootstrap(config, master, Path("/deployment"), arguments.result_file)
     except Exception:
-        if arguments.result_file.exists():
+        if arguments.result_file and arguments.result_file.exists():
             report = json.loads(arguments.result_file.read_text())
             report.update(status="failed", finished_at=datetime.now(timezone.utc).isoformat())
             temporary = arguments.result_file.with_suffix(".tmp")
