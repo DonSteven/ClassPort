@@ -29,6 +29,7 @@ def test_files_intent_module_exports():
         "signed_upload_url",
         "move",
         "search",
-        "index_all",
+        "index_file",
+        "index_user",
     ):
         assert callable(getattr(intent, fn, None)), f"missing: {fn}"

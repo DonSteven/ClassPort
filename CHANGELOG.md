@@ -29,6 +29,11 @@ versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
   and indexing through file metadata while storing immutable revision objects.
   Add a repeatable importer for existing local files and verify historical
   completed versions during restore checks.
+- **Version-scoped indexing.** Index one completed file revision at a time,
+  skip an already indexed version and pipeline, and discard results if the file
+  is deleted or superseded during extraction. Search excludes stale revisions;
+  user-scoped rebuilds report classified per-file failures and require an explicit
+  `--all-users` option for an operator-wide rebuild.
 
 #### Changed
 

@@ -1,6 +1,5 @@
 """Restore a real PostgreSQL export into another instance and read recovered data."""
 import importlib.util
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -51,30 +50,24 @@ async def test_real_export_restores_login_business_data_pdf_and_mcp(tmp_path, mo
             conn.execute("INSERT INTO courses(user_id,code,full_name) VALUES (%s,'DRILL','Recovery course')", (bootstrap.OPERATOR_ID,))
             conn.execute("INSERT INTO courses(user_id,code,full_name) VALUES (%s,'MCPDRILL','Recovered MCP course')", (bootstrap.SMOKE_ID,))
             conn.execute("INSERT INTO tasks(user_id,title,course_code) VALUES (%s,'Recover this task','DRILL')", (bootstrap.OPERATOR_ID,))
-            conn.execute("INSERT INTO file_index(user_id,path,size,sha256,text_content) VALUES (%s,%s,1,'fixture','Recovery drill PDF')", (
-                bootstrap.OPERATOR_ID, bootstrap.OPERATOR_ID + "/DRILL/sample.pdf"))
             conn.execute("INSERT INTO user_secrets(user_id,telegram_bot_token_enc) VALUES (%s,%s)", (
                 bootstrap.OPERATOR_ID, key.encrypt(b"restored-private-value")))
-            original_state = conn.execute(recovery.STATE_SQL).fetchone()[0]
         materials = tmp_path / "original"
-        folder = materials / bootstrap.OPERATOR_ID / "DRILL"
-        (folder / "empty").mkdir(parents=True)
-        (folder / "empty/.keep").touch()
+        materials.mkdir()
         with pymupdf.open() as pdf:
             pdf.new_page().insert_text((72, 72), "Recovery drill PDF")
-            pdf.save(folder / "sample.pdf")
-        original_bytes = (folder / "sample.pdf").read_bytes()
-        with psycopg.connect(source_url) as conn:
-            conn.execute("UPDATE file_index SET size=%s, sha256=%s", (
-                len(original_bytes), hashlib.sha256(original_bytes).hexdigest()))
+            original_bytes = pdf.tobytes()
         from app import db
-        from scripts.import_local_files import import_user
+        from app.services import file_index, file_records
         monkeypatch.setenv("STUDY_ROOT", str(materials))
         monkeypatch.setattr(db, "_pool", None)
         await db.init_pool(dsn(source, "classport_app", config["APP_DB_PASSWORD"]))
         try:
-            imported = await import_user(bootstrap.OPERATOR_ID, materials / bootstrap.OPERATOR_ID)
-            assert imported["errors"] == []
+            await file_records.create_folder(bootstrap.OPERATOR_ID, "DRILL/empty")
+            version = await file_records.upload(bootstrap.OPERATOR_ID, "DRILL/sample.pdf", original_bytes)
+            assert (await file_index.index_file(
+                bootstrap.OPERATOR_ID, version["file_id"], version["version_id"],
+            ))["status"] == "indexed"
         finally:
             await db.close_pool()
         with psycopg.connect(source_url) as conn:
@@ -108,7 +101,6 @@ async def test_real_export_restores_login_business_data_pdf_and_mcp(tmp_path, mo
         recovered = tmp_path / "recovered"
         recovery.extract(tmp_path / "courses.tar.gz", recovered)
         recovery.check_files(recovered, original_state, files)
-        assert (recovered / bootstrap.OPERATOR_ID / "DRILL/empty/.keep").is_file()
 
         from app import db
         from app.config import get_settings
@@ -130,6 +122,10 @@ async def test_real_export_restores_login_business_data_pdf_and_mcp(tmp_path, mo
                 assert tasks.json()[0]["title"] == "Recover this task"
                 pdf = await client.get("/api/files/raw", params={"path": "DRILL/sample.pdf"})
                 assert pdf.status_code == 200 and pdf.content == original_bytes
+                entries = await client.get("/api/files/list", params={"prefix": "DRILL"})
+                assert entries.json()[0]["path"] == "DRILL/empty"
+                hits = await client.get("/api/files/search", params={"q": "Recovery"})
+                assert hits.json()[0]["path"] == "DRILL/sample.pdf"
                 assert "inline" in pdf.headers["content-disposition"]
                 with pymupdf.open(stream=pdf.content, filetype="pdf") as document:
                     assert document.page_count == 1

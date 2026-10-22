@@ -110,6 +110,24 @@ class _TxnPool:
 
 
 @pytest_asyncio.fixture
+async def legacy_file_index(client):
+    """Exercise B2 imports against the pre-cutover index shape, rolled back after each test."""
+    from app import db
+
+    async with db.db() as conn:
+        await conn.execute("ALTER TABLE file_index DROP CONSTRAINT file_index_pkey")
+        await conn.execute(
+            """ALTER TABLE file_index ALTER COLUMN file_id DROP NOT NULL,
+               ALTER COLUMN file_version_id DROP NOT NULL, DROP COLUMN pipeline_version,
+               ADD CONSTRAINT file_index_pkey PRIMARY KEY (user_id, path)"""
+        )
+        await conn.execute(
+            """CREATE UNIQUE INDEX file_index_file_key ON file_index(user_id, file_id)
+               WHERE file_id IS NOT NULL"""
+        )
+
+
+@pytest_asyncio.fixture
 async def db_conn(pg_url):
     """Per-test connection in a `force_rollback=True` transaction.
 

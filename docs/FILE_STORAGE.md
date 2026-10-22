@@ -12,8 +12,11 @@ translates storage failures. No S3 client or cloud credentials are needed for B2
 
 ## Import and cutover
 
-Existing installations must import before starting the new file browser. Do this
-in a maintenance window using the new image/code with application writers stopped:
+Existing installations must finish B2 import before applying the B3 cutover
+migration or starting the new file browser. Use the B2 release/image for steps
+2–4, with application writers stopped. Its migration set ends at the additive
+`20261022000001_file_jobs.sql`; the B3 migration runner applies all pending SQL
+and cannot pause for an import between files.
 
 1. Take the existing database and material-directory backup. Stop web/API file
    writes, internal indexing and external n8n or cron writers.
@@ -35,7 +38,11 @@ in a maintenance window using the new image/code with application writers stoppe
    stale old indexes and missing indexed source files cause a nonzero exit.
    For a stale old index, rebuild from the imported records with
    `scripts/index_files.py`, then rerun import and verify its report.
-5. Start the new application only after all users pass verification. Resume only
+5. After every user passes verification, deploy the B3 release and run its normal
+   maintenance migration entry point. `20261022000002_file_index_versions.sql`
+   rejects unlinked indexes without deleting them. It requires file/version
+   references and changes the index primary key to `(user_id, file_id)`.
+6. Start the new application only after migration succeeds. Resume only
    writers that use the new upload service. A workflow that writes directly to
    the legacy directory must remain stopped until it uses versioned uploads.
    `/api/files/sync-materials` returns 503 until the versioned workflow is connected
@@ -48,10 +55,9 @@ coordinate any data rollback with the backup point. Do not automatically delete
 legacy trees or completed version objects. Object retention/cleanup and cloud
 migration are B8 work.
 
-The import is separate from SQL migrations so deployments cannot enforce
-non-null index references before data verification. The subsequent B1 constraint
-tightening migration must be delivered after every user's backfill has passed;
-it is not automatically bundled with B2.
+The import is separate from SQL migrations. Do not skip directly from a legacy
+release to the B3 migration batch: first finish and verify the B2 stage. A fresh,
+empty installation can apply the complete migration set directly.
 
 ## Current behavior
 
@@ -74,12 +80,51 @@ Empty directories are database records, with no `.keep` object. File and directo
 renames update metadata in a transaction without moving version objects. Deletes
 hide the affected subtree; bytes remain available for the future retention policy.
 
-`scripts/index_files.py` and the existing internal reindex endpoints enumerate
-completed database versions rather than scanning the legacy disk tree. They
-retain the existing text extraction and PostgreSQL search. Search resolves current
-names and excludes deleted files and indexes for an older current version. Web
-uploads do not yet automatically start indexing; reliable per-file tasks and
-their UI are connected in B3–B6.
+## Single-file indexing and rebuilds
+
+`app.services.file_index.index_file(user_id, file_id, version_id)` processes only
+that completed immutable version. It validates ownership and reads the object
+location in a short database checkout, returns the connection before storage I/O
+and threaded text extraction, then locks the file in another short transaction.
+Only a live file still pointing to the requested version can publish its result.
+The return status is `indexed`, `skipped` (same version and pipeline already
+indexed), or `discarded` with `file_deleted` / `version_changed` as its reason.
+
+`IndexingError` exposes a safe message, `code`, and `retryable` flag. Invalid or
+encrypted PDFs, invalid notebooks, unsupported formats, incomplete uploads,
+unknown versions and missing completed content are not automatically retryable.
+Temporary storage/database failures are retryable. A legitimate document with
+no extracted text is distinct from a parser failure. No OCR is performed.
+
+`index_user(user_id)` enumerates only that user's current completed files and
+calls the same single-file entry point. Non-text materials are skipped during a
+rebuild; directly requesting their indexing reports `unsupported_format`.
+The report contains counts and per-file classified errors. Rebuilds continue
+after a classified file failure. To run maintenance with runtime `DATABASE_URL`
+and `STUDY_ROOT` configured:
+
+```sh
+uv run --no-sync python scripts/index_files.py --user-id USER_UUID
+uv run --no-sync python scripts/index_files.py --all-users
+```
+
+The command prints a JSON report and exits nonzero if any file failed. Cross-user
+rebuilds require the explicit `--all-users` operator option. Both existing
+`POST /api/internal/index-files` and `POST /api/internal/sync` require a `user_id`
+query parameter and the internal secret; neither defaults to a global rebuild.
+These endpoints still use process-local background tasks for maintenance. B4/B5
+will replace their execution with persistent job dispatch.
+
+Change `PIPELINE_VERSION` whenever extraction/processing behavior changes. Its
+value is stored on the index, so a changed pipeline reprocesses unchanged file
+bytes; future jobs use the existing version/type/pipeline uniqueness constraint.
+Repeated calls for the same indexed version/pipeline skip object reads. A new
+version is published with its own reference even when its bytes match v1.
+
+PostgreSQL full-text ranking, snippets and the existing GIN index are retained.
+Search resolves current names and excludes deleted files and indexes for an
+older current version. Web uploads do not yet automatically start indexing;
+durable processing and its UI are connected in B4–B6.
 
 Backups still archive the local root. Restore verification checks every completed
 local version's object reference, including historical and not-yet-indexed files.

@@ -12,7 +12,7 @@ from uuid import uuid4
 
 
 request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
-FIELDS = {"event", "stage", "method", "path", "status", "duration_ms", "error_type", "indexed", "skipped", "failed", "pruned", "total_seen"}
+FIELDS = {"event", "stage", "method", "path", "status", "duration_ms", "error_type", "indexed", "skipped", "failed", "pruned", "total_seen", "user_id", "file_id", "version_id", "error_code"}
 log = logging.getLogger("app.operations")
 
 

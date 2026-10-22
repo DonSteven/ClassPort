@@ -57,8 +57,12 @@ async def search(user_id: UUID, q: str, limit: int = 20) -> list[dict[str, Any]]
     return await file_index_svc.search(user_id, q, limit)
 
 
-async def index_all(user_id: UUID) -> dict[str, Any]:
-    return await file_index_svc.index_all(user_id)
+async def index_file(user_id: UUID, file_id: UUID, version_id: UUID) -> dict[str, Any]:
+    return await file_index_svc.index_file(user_id, file_id, version_id)
+
+
+async def index_user(user_id: UUID) -> dict[str, Any]:
+    return await file_index_svc.index_user(user_id)
 
 
 async def create_folder(user_id: UUID, path: str) -> dict:

@@ -192,19 +192,12 @@ async def test_same_user_wrong_file_version_is_rejected(db_conn, relationship):
 
 
 @pytest.mark.asyncio
-async def test_legacy_index_rows_remain_supported(db_conn):
+async def test_index_references_are_required_after_cutover(db_conn):
     async with db_conn.connection() as conn:
-        row = await (await conn.execute(
-            """INSERT INTO file_index(user_id, path, text_content)
-               VALUES (%s, 'legacy.pdf', 'legacy text') RETURNING file_id, file_version_id""",
-            (OPERATOR,),
-        )).fetchone()
-        assert row == {"file_id": None, "file_version_id": None}
-        file = await make_file(conn)
-        with pytest.raises(psycopg.errors.CheckViolation):
+        with pytest.raises(psycopg.errors.NotNullViolation):
             async with conn.transaction():
                 await conn.execute(
-                    "UPDATE file_index SET file_id = %s WHERE path = 'legacy.pdf'", (file["id"],),
+                    "INSERT INTO file_index(user_id, path) VALUES (%s, 'unlinked.pdf')", (OPERATOR,),
                 )
 
 

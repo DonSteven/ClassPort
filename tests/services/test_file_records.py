@@ -94,7 +94,7 @@ async def test_failed_storage_does_not_change_current_version(client, monkeypatc
     assert await files.download(USER, "lecture.pdf") == b"old"
 
 
-async def test_import_is_repeatable_links_index_and_keeps_sources(client, tmp_path):
+async def test_import_is_repeatable_links_index_and_keeps_sources(client, tmp_path, legacy_file_index):
     source = tmp_path / str(USER)
     (source / "COURSE/empty").mkdir(parents=True)
     (source / "COURSE/empty/.keep").touch()
@@ -123,7 +123,7 @@ async def test_import_is_repeatable_links_index_and_keeps_sources(client, tmp_pa
     assert any("registered source" in e["error"] for e in (await import_user(USER, source))["errors"])
 
 
-async def test_import_reports_conflicts_and_missing_indexed_sources(client, tmp_path):
+async def test_import_reports_conflicts_and_missing_indexed_sources(client, tmp_path, legacy_file_index):
     source = tmp_path / "legacy"
     source.mkdir()
     (source / "lecture.txt").write_bytes(b"changed")

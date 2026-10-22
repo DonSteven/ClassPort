@@ -188,7 +188,7 @@ docker compose --env-file .env.docker exec classport uv run --no-sync python -c 
   'import os; assert "MIGRATION_DATABASE_URL" not in os.environ; assert "POSTGRES_PASSWORD" not in os.environ'
 ```
 
-## File versions and processing jobs: B1 first migration
+## File versions and processing jobs
 
 `20261022000001_file_jobs.sql` adds the file and job records for the first
 stage of B1:
@@ -213,11 +213,21 @@ together. Existing index writes and search remain supported; a referenced index
 is unique per user and file. Files may have no current version during the first
 upload, and directories have none.
 
-B2 file APIs and indexing now populate these records. Existing installations
-must import and verify legacy content and index references before cutover; see
-[local file storage](FILE_STORAGE.md). A second migration makes index references
-mandatory only after that verification. Deliver that second migration after the
-import: the migration runner
-applies all pending SQL files in one batch and does not pause for backfills.
-Version bytes are immutable through the B2 storage implementation; persistent
-execution, retry and outbox dispatch are connected in B4/B5.
+B2 file APIs and indexing populate these records. Existing installations must
+finish and verify imports using the B2 release before the B3 migration batch;
+see [local file storage](FILE_STORAGE.md). The runner applies all pending SQL
+files in one batch and does not pause for backfills.
+
+`20261022000002_file_index_versions.sql` rejects any remaining unlinked index,
+makes both references mandatory, and replaces the path primary key with
+`(user_id, file_id)`. Logical paths are read from `files`, including after a
+rename. The retained index `path` column is internal metadata, not a uniqueness
+or ownership boundary. The migration adds `pipeline_version` (initially `1`)
+without changing indexed text, the generated search vector or the GIN index.
+The first migration's foreign keys still enforce user/file/version ownership.
+Current versions stay nullable for directories and initial uploads.
+
+Version bytes are immutable through B2. B3 publishes in a short transaction
+after locking and rechecking the file's current version and deletion state;
+storage reads and parsing hold no connection. Persistent execution, retry and
+outbox dispatch are connected in B4/B5.
