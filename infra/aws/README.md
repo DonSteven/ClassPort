@@ -126,6 +126,13 @@ Generate this **once for a new installation**, then upload to the secret created
 by Terraform. Use a different email for the dedicated release-check account.
 The operator password is entered without echoing it or putting it in arguments.
 
+The application secret also accepts optional string values `JOB_TIME_LIMIT`
+(default `"120"`, minimum 2), `JOB_MAX_ATTEMPTS` (default `"3"`, minimum 1) and
+`JOB_REDELIVERY_SECONDS` (default `"60"`, minimum 1). Bootstrap writes them to one
+shared `.env.jobs` file used by the API and all background services. Change these
+values in the existing secret while preserving its credentials and keys; each
+release regenerates the file. Backup restores use the recorded secret version.
+
 ```bash
 python3 infra/aws/scripts/create-config.py \
   --operator-email admin@example.com --smoke-email checks@example.com \

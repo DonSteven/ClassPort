@@ -27,6 +27,7 @@ crash.log
 .env.migration
 .env.smoke
 .env.coordinator
+.env.jobs
 release.env
 /releases/
 /incoming/

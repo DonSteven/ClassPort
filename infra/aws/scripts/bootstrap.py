@@ -28,14 +28,18 @@ REQUIRED_KEYS = {
     "COORDINATOR_DB_PASSWORD",
     "SESSION_SECRET", "SECRETS_ENCRYPTION_KEY",
 }
+JOB_DEFAULTS = {"JOB_TIME_LIMIT": "120", "JOB_MAX_ATTEMPTS": "3", "JOB_REDELIVERY_SECONDS": "60"}
 
 
 def validate_config(config):
-    if set(config) != REQUIRED_KEYS or any(
+    if not REQUIRED_KEYS <= config.keys() or config.keys() - REQUIRED_KEYS - JOB_DEFAULTS.keys() or any(
         not isinstance(value, str) or not value or "\n" in value or "\r" in value or "\0" in value
         for value in config.values()
     ):
         raise ValueError("Invalid application secret keys/values")
+    for name, default in JOB_DEFAULTS.items():
+        if int(config.get(name, default)) < (2 if name == "JOB_TIME_LIMIT" else 1):
+            raise ValueError(f"Invalid {name}")
     if config["OPERATOR_EMAIL"].strip().lower() == config["SMOKE_EMAIL"].strip().lower():
         raise ValueError("The release check account must be separate from the operator")
     if len({config[key] for key in ("APP_DB_PASSWORD", "MIGRATION_DB_PASSWORD", "COORDINATOR_DB_PASSWORD")}) != 3:
@@ -149,6 +153,7 @@ def configure_runtime(config, root):
         "DB_POOL_MIN_SIZE": "1", "DB_POOL_MAX_SIZE": "2",
         "CELERY_BROKER_URL": "redis://redis:6379/0",
     })
+    write_env(root / ".env.jobs", {name: config.get(name, default) for name, default in JOB_DEFAULTS.items()})
     (root / ".env.migration").unlink(missing_ok=True)
 
 

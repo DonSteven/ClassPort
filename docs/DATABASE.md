@@ -56,7 +56,8 @@ not the runtime pool.
 cp .env.example .env
 cp .env.migration.example .env.migration
 cp .env.docker.example .env.docker
-chmod 600 .env .env.migration .env.docker
+cp .env.jobs.example .env.jobs
+chmod 600 .env .env.migration .env.docker .env.jobs
 ```
 
 - `.env`: runtime `DATABASE_URL`, pool settings, and Web application settings.
@@ -64,6 +65,8 @@ chmod 600 .env .env.migration .env.docker
   `APP_PASSWORD_HASH` for operator initialization. No session secret is needed.
 - `.env.docker`: local PostgreSQL bootstrap credentials and public frontend
   build settings. The runtime container does not load this file.
+- `.env.jobs`: shared task limits and retry settings for the API, worker and
+  coordinators. Configuration and coordinator setup are in [WORKERS.md](WORKERS.md).
 
 Do not put the migration URL or administrator password in `.env`. Do not mount
 maintenance credential files into the runtime container. Both env files use

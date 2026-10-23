@@ -79,7 +79,8 @@ cd web && pnpm install && cd ..
 cp .env.example .env
 cp .env.migration.example .env.migration
 cp .env.docker.example .env.docker
-chmod 600 .env .env.migration .env.docker
+cp .env.jobs.example .env.jobs
+chmod 600 .env .env.migration .env.docker .env.jobs
 ```
 
 Set `DATABASE_URL`, `SESSION_SECRET`, and `SECRETS_ENCRYPTION_KEY` in
@@ -87,8 +88,8 @@ Set `DATABASE_URL`, `SESSION_SECRET`, and `SECRETS_ENCRYPTION_KEY` in
 `APP_PASSWORD_HASH` in `.env.migration`. Generate the password hash with
 `uv run python -m app.tools.hashpw`; generate separate random database passwords.
 
-The URLs target the same database using different roles. The backend loads only
-`.env`; maintenance loads only `.env.migration`. The local PostgreSQL
+The URLs target the same database using different roles. The backend loads
+`.env` and shared task settings from `.env.jobs`; maintenance loads only `.env.migration`. The local PostgreSQL
 container loads `.env.docker`, which also supplies public frontend build settings.
 
 Follow [database setup](docs/DATABASE.md) to provision the roles and grants before

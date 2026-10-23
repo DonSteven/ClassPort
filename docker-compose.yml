@@ -46,6 +46,8 @@ services:
       - path: .env
         format: raw
         required: true
+      - path: .env.jobs
+        format: raw
     environment:
       # Tell the storage layer where the canonical course tree lives.
       STUDY_ROOT: "/opt/courses"
@@ -85,6 +87,8 @@ services:
     env_file:
       - path: .env
         format: raw
+      - path: .env.jobs
+        format: raw
     environment:
       STUDY_ROOT: /opt/courses
       CELERY_BROKER_URL: redis://redis:6379/0
@@ -112,6 +116,8 @@ services:
       - path: .env.coordinator
         format: raw
         required: false
+      - path: .env.jobs
+        format: raw
     volumes:
       - ./certs:/etc/classport/certs:ro
     healthcheck:

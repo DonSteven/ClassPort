@@ -14,8 +14,13 @@ def test_runtime_does_not_receive_maintenance_credentials(tmp_path, maintenance_
     root = Path(__file__).resolve().parents[1]
     shutil.copy(root / "docker-compose.yml", tmp_path)
     (tmp_path / ".env").write_text(
-        "DATABASE_URL=postgresql://app:runtime@db/study\nSESSION_SECRET=runtime-secret\n"
+        "DATABASE_URL=postgresql://app:runtime@db/study\nSESSION_SECRET=runtime-secret\nJOB_MAX_ATTEMPTS=2\n"
     )
+    (tmp_path / ".env.coordinator").write_text(
+        "DATABASE_URL=postgresql://coordinator:control@db/study\nJOB_MAX_ATTEMPTS=4\n"
+    )
+    job_settings = {"JOB_TIME_LIMIT": "180", "JOB_MAX_ATTEMPTS": "5", "JOB_REDELIVERY_SECONDS": "25"}
+    (tmp_path / ".env.jobs").write_text("".join(f"{key}={value}\n" for key, value in job_settings.items()))
     (tmp_path / ".env.docker").write_text(
         "POSTGRES_USER=bootstrap\nPOSTGRES_PASSWORD=bootstrap-secret\nPOSTGRES_DB=study\n"
     )
@@ -40,6 +45,11 @@ def test_runtime_does_not_receive_maintenance_credentials(tmp_path, maintenance_
     assert "MIGRATION_DATABASE_URL" not in runtime
     assert "APP_PASSWORD_HASH" not in runtime
     assert "SESSION_SECRET" not in maintenance
+    for name in ("classport", "worker", "dispatcher", "job-recovery"):
+        assert {key: services[name]["environment"][key] for key in job_settings} == job_settings
+    for name in ("dispatcher", "job-recovery"):
+        assert "SESSION_SECRET" not in services[name]["environment"]
+        assert services[name]["environment"]["DATABASE_URL"].startswith("postgresql://coordinator:")
     if maintenance_file:
         assert "maintenance-secret" in maintenance["MIGRATION_DATABASE_URL"]
         # `compose config` escapes dollars for its serialized output.

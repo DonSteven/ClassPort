@@ -11,7 +11,7 @@ import pytest
 def test_deploy_runs_maintenance_separately_and_skips_local_db_when_external(tmp_path, external):
     root = Path(__file__).resolve().parents[1]
     shutil.copy(root / "deploy.sh", tmp_path)
-    for name in ("Dockerfile", "docker-compose.yml", ".env", ".env.docker", ".env.migration", ".env.coordinator"):
+    for name in ("Dockerfile", "docker-compose.yml", ".env", ".env.docker", ".env.migration", ".env.coordinator", ".env.jobs"):
         (tmp_path / name).touch()
     scripts = tmp_path / "scripts"
     scripts.mkdir()
@@ -62,7 +62,7 @@ def test_local_rollback_restores_frontend_and_only_supported_background_processe
     root = Path(__file__).resolve().parents[1]
     script = tmp_path / "deploy.sh"
     script.write_text((root / "deploy.sh").read_text().replace("HEALTH_TIMEOUT=60", "HEALTH_TIMEOUT=1"))
-    for name in ("Dockerfile", "docker-compose.yml", ".env", ".env.docker", ".env.migration", ".env.coordinator"):
+    for name in ("Dockerfile", "docker-compose.yml", ".env", ".env.docker", ".env.migration", ".env.coordinator", ".env.jobs"):
         (tmp_path / name).touch()
     binaries = tmp_path / "bin"
     binaries.mkdir()

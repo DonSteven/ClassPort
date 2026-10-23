@@ -15,9 +15,11 @@ def test_production_uses_only_pinned_images_and_keeps_credentials_separate(tmp_p
     snapshot.mkdir(parents=True)
     shutil.copy(root / "docker-compose.prod.yml", snapshot)
     shutil.copy(root / ".env.release.example", snapshot / "release.env")
-    (tmp_path / ".env").write_text("DATABASE_URL=postgresql://app:runtime@rds/study\nSESSION_SECRET=test\n")
+    (tmp_path / ".env").write_text("DATABASE_URL=postgresql://app:runtime@rds/study\nSESSION_SECRET=test\nJOB_MAX_ATTEMPTS=2\n")
     (tmp_path / ".env.migration").write_text("MIGRATION_DATABASE_URL=postgresql://admin:maintenance@rds/study\n")
-    (tmp_path / ".env.coordinator").write_text("DATABASE_URL=postgresql://coordinator:control@rds/study\n")
+    (tmp_path / ".env.coordinator").write_text("DATABASE_URL=postgresql://coordinator:control@rds/study\nJOB_MAX_ATTEMPTS=4\n")
+    job_settings = {"JOB_TIME_LIMIT": "180", "JOB_MAX_ATTEMPTS": "5", "JOB_REDELIVERY_SECONDS": "25"}
+    (tmp_path / ".env.jobs").write_text("".join(f"{key}={value}\n" for key, value in job_settings.items()))
     (tmp_path / ".env.smoke").write_text("SMOKE_PASSWORD=smoke-secret\nSMOKE_MCP_TOKEN=smoke-token\n")
     # An accidental local override must have no effect on the explicit file.
     (tmp_path / "docker-compose.override.yml").write_text("services:\n  postgres:\n    image: postgres:16-alpine\n")
@@ -43,6 +45,8 @@ def test_production_uses_only_pinned_images_and_keeps_credentials_separate(tmp_p
     for name in ("worker", "dispatcher", "job-recovery"):
         assert services[name]["image"] == services["classport"]["image"]
         assert "MIGRATION_DATABASE_URL" not in services[name]["environment"]
+    for name in ("classport", "worker", "dispatcher", "job-recovery"):
+        assert {key: services[name]["environment"][key] for key in job_settings} == job_settings
     for name in ("dispatcher", "job-recovery"):
         assert services[name]["environment"]["DATABASE_URL"].startswith("postgresql://coordinator:")
         assert "SESSION_SECRET" not in services[name]["environment"]

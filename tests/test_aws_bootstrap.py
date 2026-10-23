@@ -22,18 +22,37 @@ bootstrap = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(bootstrap)
 
 
-def test_config_validation_and_raw_secret_files(tmp_path):
+@pytest.mark.parametrize("job_settings", [{}, {
+    "JOB_TIME_LIMIT": "180", "JOB_MAX_ATTEMPTS": "5", "JOB_REDELIVERY_SECONDS": "25",
+}])
+def test_config_validation_and_raw_secret_files(tmp_path, monkeypatch, job_settings):
     config = {key: "test-value" for key in bootstrap.REQUIRED_KEYS}
     config.update(
         OPERATOR_EMAIL="operator@example.test", SMOKE_EMAIL="smoke@example.test",
         APP_DB_PASSWORD="app-only", MIGRATION_DB_PASSWORD="maintenance-only",
         SECRETS_ENCRYPTION_KEY=Fernet.generate_key().decode(),
     )
+    config.update(job_settings)
     bootstrap.validate_config(config)
     with pytest.raises(ValueError):
         bootstrap.validate_config({**config, "SESSION_SECRET": "value\nMIGRATION_DATABASE_URL=bad"})
     with pytest.raises(ValueError):
         bootstrap.validate_config({**config, "SMOKE_EMAIL": config["OPERATOR_EMAIL"]})
+    with pytest.raises(ValueError):
+        bootstrap.validate_config({**config, "UNSUPPORTED_SETTING": "value"})
+    for name, invalid in (("JOB_TIME_LIMIT", "1"), ("JOB_MAX_ATTEMPTS", "0"),
+                          ("JOB_REDELIVERY_SECONDS", "0"), ("JOB_MAX_ATTEMPTS", "many")):
+        with pytest.raises(ValueError):
+            bootstrap.validate_config({**config, name: invalid})
+    monkeypatch.setenv("DB_HOST", "database.example.test")
+    monkeypatch.setenv("DB_NAME", "study")
+    monkeypatch.setenv("PUBLIC_URL", "https://study.example.test")
+    bootstrap.configure_runtime(config, tmp_path)
+    expected = {**bootstrap.JOB_DEFAULTS, **job_settings}
+    assert (tmp_path / ".env.jobs").read_text() == "".join(f"{key}={value}\n" for key, value in expected.items())
+    assert (tmp_path / ".env.jobs").stat().st_mode & 0o777 == 0o600
+    assert "JOB_" not in (tmp_path / ".env").read_text()
+    assert "JOB_" not in (tmp_path / ".env.coordinator").read_text()
     target = tmp_path / ".env"
     target.touch(mode=0o644)
     bootstrap.write_env(target, {"APP_PASSWORD_HASH": "$argon2id$literal-value"})

@@ -127,6 +127,7 @@ log "=== deploy starting ==="
 [ -f .env.docker ]        || { err ".env.docker missing — postgres secrets"; exit 1; }
 [ -f .env.migration ]     || { err ".env.migration missing — maintenance credentials"; exit 1; }
 [ -f .env.coordinator ]   || { err ".env.coordinator missing — restricted task coordinator credentials"; exit 1; }
+[ -f .env.jobs ]          || { err ".env.jobs missing — copy .env.jobs.example for shared task settings"; exit 1; }
 [ -f Dockerfile ]         || { err "Dockerfile missing"; exit 1; }
 
 log "validating docker-compose.yml..."

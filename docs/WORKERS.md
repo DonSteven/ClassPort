@@ -54,9 +54,11 @@ depend on Redis, so confirmed uploads can accumulate safely while it is down.
 ## Local configuration
 
 Copy `.env.coordinator.example` to `.env.coordinator` and set its separately
-provisioned database login. The file is ignored by Git. Application `.env`
-continues to contain only runtime configuration; `.env.migration` remains a
-maintenance-only file.
+provisioned database login. Copy `.env.jobs.example` to `.env.jobs` and keep all
+three task settings in that shared file. Compose loads `.env.jobs` after each
+service's credential file for the API, worker, dispatcher and recovery process.
+Set task parameters only in `.env.jobs`. These local files are ignored by Git;
+`.env.migration` remains a maintenance-only file.
 
 After applying the normal SQL migrations, an administrator provisions the
 coordinator role. Use the actual database name, and set the password interactively:
@@ -81,9 +83,15 @@ Default execution settings are a 120-second hard deadline, a 150-second lease
 and three automatic attempts. Temporary failures wait 5 then 10 seconds before
 retrying. Recovery runs every 5 seconds and replenishes due notifications older
 than 60 seconds. `JOB_TIME_LIMIT`, `JOB_MAX_ATTEMPTS` and
-`JOB_REDELIVERY_SECONDS` can be set in runtime configuration; workers and
-coordinators must use the same values. Celery does not maintain a separate
-business retry counter or result backend.
+`JOB_REDELIVERY_SECONDS` are configured together in `.env.jobs`. Restart the API
+and all background services after changing them. Celery does not maintain a
+separate business retry counter or result backend.
+
+On AWS, the versioned application secret is the configuration source. It accepts
+these three optional keys as integer strings, with the defaults above. Bootstrap
+and restore generate `.env.jobs` from that secret; edit the secret for cloud
+changes, since the next release regenerates the file. Backups retain the secret
+version, so restore regenerates the same task settings.
 
 Workers default to one child, a separate 1–2 connection pool, a 512 MiB memory
 limit and one CPU. `WORKER_CONCURRENCY` controls child count through Compose
@@ -132,7 +140,10 @@ safe errors, bounded retries and execution fencing. `tests/test_worker_processes
 uses committed PostgreSQL data, real Redis, Celery prefork children and separate
 coordinator processes. It covers lost Redis notifications, interruption after
 publishing but before recording dispatch, worker termination, user separation
-and restricted database permissions.
+and restricted database permissions. The broker fixture waits for Redis PING;
+failed process checks include child logs, and failed dispatch interruption checks
+include database task/outbox state. Compose and bootstrap tests exercise shared
+non-default task settings while checking credential separation.
 
 `tests/test_release_images.py` starts the image-built API, worker, coordinators
 and frontend with shared disposable content storage. It exercises the same

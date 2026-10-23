@@ -6,6 +6,7 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+import time
 from uuid import uuid4
 
 import psycopg
@@ -16,6 +17,7 @@ from psycopg_pool import AsyncConnectionPool
 import pytest
 import pytest_asyncio
 from redis import Redis
+from redis.exceptions import ConnectionError as RedisConnectionError, TimeoutError as RedisTimeoutError
 from testcontainers.core.container import DockerContainer
 
 from app import db
@@ -28,6 +30,16 @@ ROOT = Path(__file__).resolve().parents[1]
 def broker():
     with DockerContainer("redis:7.4-alpine").with_bind_ports(6379, ("127.0.0.1", None)) as redis:
         url = f"redis://{redis.get_container_host_ip()}:{redis.get_exposed_port(6379)}/0"
+        with Redis.from_url(url, socket_connect_timeout=1, socket_timeout=1) as client:
+            deadline = time.monotonic() + 10
+            while True:
+                try:
+                    assert client.ping()
+                    break
+                except (RedisConnectionError, RedisTimeoutError):
+                    if time.monotonic() >= deadline:
+                        raise
+                    time.sleep(0.1)
         yield url
 
 
@@ -79,8 +91,12 @@ async def environment(pg_url, roles, broker, tmp_path, monkeypatch):
                 proc = subprocess.Popen(command, env=env, cwd=tmp_path, stdout=output,
                                         stderr=subprocess.STDOUT, start_new_session=True)
                 processes.append(proc)
+                failed = False
                 try:
                     yield proc
+                except BaseException:
+                    failed = True
+                    raise
                 finally:
                     if proc.poll() is None:
                         os.killpg(proc.pid, signal.SIGTERM)
@@ -90,8 +106,8 @@ async def environment(pg_url, roles, broker, tmp_path, monkeypatch):
                             os.killpg(proc.pid, signal.SIGKILL)
                             proc.wait(timeout=5)
                     output.seek(0)
-                    if proc.returncode not in (0, -signal.SIGKILL, -signal.SIGTERM):
-                        print(output.read()[-6000:])
+                    if failed or proc.returncode not in (0, -signal.SIGKILL, -signal.SIGTERM):
+                        print(f"{mode} exited {proc.returncode}; log: {output.name}\n{output.read()[-6000:]}")
 
         try:
             yield user, process
@@ -166,11 +182,21 @@ async def test_dispatcher_killed_after_send_can_resend_without_duplicate_executi
             END $$""").format(sql.Literal(upload["job_id"])))
         guard.execute("CREATE TRIGGER test_pause_dispatch BEFORE UPDATE ON outbox FOR EACH ROW EXECUTE FUNCTION test_pause_dispatch()")
         try:
-            with process("dispatch", once=True) as child:
-                async with asyncio.timeout(15):
-                    while not redis.llen("file-processing"):
-                        assert child.poll() is None
-                        await asyncio.sleep(0.1)
+            with process("dispatch") as child:
+                try:
+                    async with asyncio.timeout(15):
+                        while not redis.llen("file-processing"):
+                            assert child.poll() is None, "dispatcher exited before publishing"
+                            await asyncio.sleep(0.1)
+                except (AssertionError, TimeoutError):
+                    state = await db.fetchrow(
+                        """SELECT j.status AS job_status, j.next_run_at, o.status AS outbox_status,
+                                  o.available_at, clock_timestamp() AS database_time
+                           FROM jobs j JOIN outbox o ON o.job_id=j.id AND o.user_id=j.user_id
+                           WHERE j.id=%s""", upload["job_id"],
+                    )
+                    print(f"Dispatch interruption state: {state}; Redis queue: {redis.llen('file-processing')}")
+                    raise
                 os.killpg(child.pid, signal.SIGKILL)
                 await asyncio.to_thread(child.wait, 5)
         finally:
@@ -198,9 +224,8 @@ async def test_killed_worker_is_recovered_by_an_independent_process(environment,
         await db.execute("UPDATE jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE id=%s", upload["job_id"])
         await coordinate(process, "recover")
     assert await db.fetchval("SELECT count(*) FROM file_index WHERE file_id=%s", upload["file_id"]) == 0
-    await asyncio.sleep(5)
-    await coordinate(process, "dispatch")
-    with process("worker"):
+    # Run dispatch continuously, as in production, while retry backoff elapses.
+    with process("dispatch"), process("worker"):
         state = await wait_status(user, upload["job_id"])
     assert state["attempt_count"] == 2
     assert await db.fetchval("SELECT status FROM job_attempts WHERE job_id=%s AND attempt_no=1", upload["job_id"]) == "expired"

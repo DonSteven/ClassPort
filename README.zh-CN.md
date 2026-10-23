@@ -77,12 +77,13 @@ cd web && pnpm install && cd ..
 cp .env.example .env
 cp .env.migration.example .env.migration
 cp .env.docker.example .env.docker
-chmod 600 .env .env.migration .env.docker
+cp .env.jobs.example .env.jobs
+chmod 600 .env .env.migration .env.docker .env.jobs
 ```
 
 将 `DATABASE_URL`、`SESSION_SECRET` 和 `SECRETS_ENCRYPTION_KEY` 写入 `.env`；将 `MIGRATION_DATABASE_URL`、`OPERATOR_EMAIL` 和 `APP_PASSWORD_HASH` 写入 `.env.migration`。使用 `uv run python -m app.tools.hashpw` 生成密码哈希。
 
-两个 URL 指向同一数据库，但使用不同角色。后端只读取 `.env`，维护任务只读取 `.env.migration`；`.env.docker` 保存本地 PostgreSQL 凭证与公开的前端构建配置。
+两个 URL 指向同一数据库，但使用不同角色。后端读取 `.env` 和 `.env.jobs` 中的共享任务设置，维护任务只读取 `.env.migration`；`.env.docker` 保存本地 PostgreSQL 凭证与公开的前端构建配置。
 
 [数据库配置指南](docs/DATABASE.md) 介绍首次创建角色、已有环境接入、连接池，以及 RDS 的 TLS 连接设置。
 

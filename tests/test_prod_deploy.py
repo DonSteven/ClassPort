@@ -28,7 +28,7 @@ def _bundle(path, number):
 def host(tmp_path):
     root = tmp_path / "host"
     root.mkdir()
-    for name in (".env", ".env.smoke", ".env.coordinator"):
+    for name in (".env", ".env.smoke", ".env.coordinator", ".env.jobs"):
         (root / name).touch()
     (root / "certs").mkdir()
     (root / "certs/global-bundle.pem").touch()

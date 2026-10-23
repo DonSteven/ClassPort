@@ -6,6 +6,17 @@ versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### 2026-10-23
+
+#### Fixed
+
+- **Shared job settings.** Load time limits, maximum attempts and redelivery
+  intervals from `.env.jobs` consistently across the API, workers, dispatcher
+  and recovery process, including AWS bootstrap.
+- **Worker recovery tests.** Wait for broker readiness and run dispatch
+  continuously across retry backoff so interrupted dispatch and expired-worker
+  recovery checks follow the production process lifecycle.
+
 ### 2026-10-22
 
 #### Added

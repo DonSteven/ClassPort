@@ -6,8 +6,10 @@ persistent storage and initial secrets are described in [the AWS guide](../infra
 
 The backend digest also runs the file worker, dispatcher and recovery services.
 Redis uses a private Docker network and its own persistent directory. The
-coordinators receive `.env.coordinator` with a restricted database identity;
-normal releases include background processing in switching and rollback. See
+coordinators receive `.env.coordinator` with a restricted database identity.
+The API and background services share task settings from `.env.jobs`, generated
+from the versioned application secret. Normal releases include background
+processing in switching and rollback. See
 [WORKERS.md](WORKERS.md) for configuration and task recovery.
 
 ## Configure the release environment
