@@ -213,7 +213,11 @@
     "createdFolder": "Created {{name}}/",
     "renamedTo": "Renamed to {{name}}",
     "deletedName": "Deleted {{name}}",
-    "uploadedName": "Uploaded {{name}}",
+    "uploadedName": "{{name}} saved; processing accepted",
+    "confirmationFailedName": "{{name}} transferred; confirmation could not be completed",
+    "confirmAgain": "Confirm again",
+    "statusUnavailable": "Could not check processing status",
+    "refreshStatus": "Check again",
     "uploadFailed": "Upload failed: {{name}} — {{msg}}",
     "folderFailed": "Failed to create folder — {{msg}}",
     "renameFailed": "Rename failed — {{msg}}",
@@ -225,7 +229,9 @@
     "uploadStates": {
       "waiting": "Waiting to upload",
       "uploading": "Uploading",
-      "uploaded": "Upload complete",
+      "confirming": "File transferred; confirming upload",
+      "confirmation_failed": "File transferred; confirmation result unavailable",
+      "accepted": "File saved; waiting to process",
       "failed": "Upload failed",
       "incomplete": "Upload incomplete"
     },

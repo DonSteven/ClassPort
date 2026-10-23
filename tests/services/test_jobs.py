@@ -126,12 +126,29 @@ async def test_corrupt_pdf_is_permanent_and_other_files_continue(client):
     broken = await files.upload(USER, "broken.pdf", b"invalid PDF")
     good = await files.upload(USER, "notes.txt", b"quantum mechanics")
     await jobs.run(broken["job_id"], "worker")
+    await db.execute("UPDATE jobs SET next_run_at=clock_timestamp()-interval '1 minute' WHERE id=%s", good["job_id"])
     await jobs.run(good["job_id"], "worker")
     state = await jobs.get(USER, broken["job_id"])
     assert state["error_code"] == "invalid_pdf" and state["can_retry"] is False
-    with pytest.raises(StorageConflict):
+    with pytest.raises(StorageConflict, match="Replace the file"):
         await jobs.retry(USER, broken["job_id"])
     assert (await jobs.get(USER, good["job_id"]))["status"] == "succeeded"
+
+
+@pytest.mark.parametrize(("status", "error_code", "reason"), [
+    ("queued", None, "already waiting or processing"),
+    ("running", None, "already waiting or processing"),
+    ("retry_wait", "worker_lost", "already waiting or processing"),
+    ("succeeded", None, "Only failed processing"),
+    ("cancelled", "version_changed", "Only failed processing"),
+])
+async def test_retry_explains_status_and_does_not_create_notifications(client, status, error_code, reason):
+    upload = await files.upload(USER, "notes.txt", b"quantum mechanics")
+    await db.execute("UPDATE jobs SET status=%s, error_code=%s", status, error_code)
+    with pytest.raises(StorageConflict, match=reason):
+        await jobs.retry(USER, upload["job_id"])
+    assert await db.fetchval("SELECT count(*) FROM outbox") == 1
+    assert (await jobs.get(USER, upload["job_id"]))["can_retry"] is False
 
 
 async def test_dispatch_interruption_duplicates_and_lost_notifications_recover(client):
@@ -157,12 +174,14 @@ async def test_outdated_deleted_and_unsupported_pipeline_jobs_cannot_publish(cli
     old = await files.upload(USER, "notes.txt", b"old text")
     current = await files.upload(USER, "notes.txt", b"quantum mechanics")
     assert (await jobs.get(USER, old["job_id"]))["status"] == "cancelled"
+    with pytest.raises(StorageConflict, match="newer file version"):
+        await jobs.retry(USER, old["job_id"])
     await jobs.run(old["job_id"], "worker")
     await db.execute("UPDATE jobs SET pipeline_version='not-supported' WHERE id=%s", current["job_id"])
     await jobs.run(current["job_id"], "worker")
     assert (await jobs.get(USER, current["job_id"]))["error_code"] == "unsupported_pipeline"
     await files.delete(USER, ["notes.txt"])
-    with pytest.raises(StorageConflict):
+    with pytest.raises(StorageConflict, match="file was deleted"):
         await jobs.retry(USER, current["job_id"])
     assert await db.fetchval("SELECT count(*) FROM file_index") == 0
 

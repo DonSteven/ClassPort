@@ -213,7 +213,11 @@
     "createdFolder": "已创建 {{name}}/",
     "renamedTo": "已重命名为 {{name}}",
     "deletedName": "已删除 {{name}}",
-    "uploadedName": "已上传 {{name}}",
+    "uploadedName": "{{name}} 已保存，处理请求已受理",
+    "confirmationFailedName": "{{name}} 已传输，但无法完成上传确认",
+    "confirmAgain": "重新确认",
+    "statusUnavailable": "无法查询处理状态",
+    "refreshStatus": "重新检查",
     "uploadFailed": "上传失败：{{name}} — {{msg}}",
     "folderFailed": "创建文件夹失败：{{msg}}",
     "renameFailed": "重命名失败：{{msg}}",
@@ -225,7 +229,9 @@
     "uploadStates": {
       "waiting": "等待上传",
       "uploading": "上传中",
-      "uploaded": "上传完成",
+      "confirming": "文件已传输，正在确认上传",
+      "confirmation_failed": "文件已传输，暂时无法取得确认结果",
+      "accepted": "文件已保存，等待处理",
       "failed": "上传失败",
       "incomplete": "上传未完成"
     },

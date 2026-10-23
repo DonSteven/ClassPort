@@ -8,6 +8,11 @@ versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### 2026-10-23
 
+#### Added
+
+- **Frontend regression checks.** Add Vitest coverage for file-browser
+  upload confirmation and job polling, and run the checks in CI.
+
 #### Fixed
 
 - **Shared job settings.** Load time limits, maximum attempts and redelivery
@@ -16,6 +21,14 @@ versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
 - **Worker recovery tests.** Wait for broker readiness and run dispatch
   continuously across retry backoff so interrupted dispatch and expired-worker
   recovery checks follow the production process lifecycle.
+- **Upload confirmation.** Show upload, confirmation and processing as
+  distinct states. Retry a failed confirmation without uploading the bytes
+  again, and refresh file data even when a confirmation response is lost.
+- **Processing feedback and retries.** Track each accepted job after
+  folder navigation, refresh search when processing reaches a terminal state,
+  and allow failed jobs with an unsupported pipeline to be retried after a
+  compatible release. Explain why deleted, superseded, active or permanent-error
+  jobs cannot be retried.
 
 ### 2026-10-22
 

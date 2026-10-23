@@ -22,9 +22,18 @@ job IDs, and Celery runs the processing in separate child processes.
 5. A short transaction checks the file's current version and the execution's
    identity/lease, then saves the index and job/attempt success together.
 
-The web file browser displays upload outcomes separately from processing status.
-It polls active work and stops polling on terminal states. Only an indexed
-current version with successful processing is labelled searchable.
+The web file browser displays transfer, completion confirmation and processing
+separately. If confirmation fails or its response is lost, the browser retains
+the original file/version IDs and offers confirmation again without another PUT
+or version allocation. These pending confirmations are kept in the current file
+browser session.
+
+Upload summaries track jobs by ID across folder changes. New batches retain
+earlier summaries, and manual processing retries resume task polling. Polling
+stops on terminal states and refreshes file/search caches even when the first
+task response is already terminal. Directory listings also invalidate search
+when they first observe a completed task. Only an indexed current version with
+successful processing is labelled searchable in the file list.
 
 `GET /api/jobs/{job_id}`, `GET /api/jobs?file_id=...` and
 `POST /api/jobs/{job_id}/retry` all restrict access to the authenticated user.
@@ -134,6 +143,11 @@ failure rate, retries and expired leases. Host monitoring forwards these to
 CloudWatch with alarms for stalled dispatch/recovery and growing waits.
 
 ## Validation
+
+Run `pnpm test` in `web/` for the focused upload and query behavior tests. They
+exercise lost completion responses, batch failure isolation, folder changes,
+search refresh, first-observed terminal states and polling after manual retry.
+The frontend CI job runs these tests alongside the production build.
 
 `tests/services/test_jobs.py` covers completion atomicity, duplicate handling,
 safe errors, bounded retries and execution fencing. `tests/test_worker_processes.py`

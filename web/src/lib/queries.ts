@@ -529,6 +529,16 @@ export type FileEntry = {
   searchable: boolean;
 };
 
+export type FileJob = {
+  id: string;
+  file_id: string;
+  file_version_id: string;
+  status: NonNullable<FileEntry["job_status"]>;
+  error_code: string | null;
+  last_error: string | null;
+  can_retry: boolean;
+};
+
 const activeJob = (entry: FileEntry) =>
   entry.job_status !== null && ["queued", "running", "retry_wait"].includes(entry.job_status);
 
@@ -539,13 +549,38 @@ export function useFilesList(prefix: string) {
     queryFn: async () => {
       const previous = qc.getQueryData<FileEntry[]>(["files", "list", prefix]);
       const entries = await api.get<FileEntry[]>("/api/files/list", { prefix });
-      if (previous?.some(activeJob)) {
+      const newTerminalState = entries.some((entry) => {
+        if (!entry.job_status || activeJob(entry)) return false;
+        const old = previous?.find((item) => item.file_id === entry.file_id);
+        return old?.job_id !== entry.job_id || old.job_status !== entry.job_status
+          || old.version_id !== entry.version_id || old.searchable !== entry.searchable;
+      });
+      if (newTerminalState) {
         qc.invalidateQueries({ queryKey: ["files", "search"] });
       }
       return entries;
     },
     refetchInterval: (query) => query.state.data?.some(activeJob) ? 2000 : false,
     staleTime: 60_000, // listing is cheap; refetch on focus after a min
+  });
+}
+
+export function useFileJob(jobId: string) {
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: ["jobs", jobId],
+    queryFn: async () => {
+      const job = await api.get<FileJob>(`/api/jobs/${jobId}`);
+      if (!["queued", "running", "retry_wait"].includes(job.status)) {
+        // Also refresh when the first response is already terminal.
+        qc.invalidateQueries({ queryKey: ["files"] });
+      }
+      return job;
+    },
+    refetchInterval: (query) => query.state.data
+      && ["queued", "running", "retry_wait"].includes(query.state.data.status) ? 2000 : false,
+    staleTime: Infinity,
+    refetchOnMount: "always",
   });
 }
 
@@ -635,8 +670,14 @@ export function useSyncMaterials() {
   });
 }
 
+export type FileUploadTarget = { file_id: string; version_id: string };
+export type FileUploadResult = FileUploadTarget & {
+  path: string;
+  job_id: string;
+  job_status: FileJob["status"];
+};
+
 export function useUploadFile() {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ file, path }: { file: File; path: string }) => {
       const { url, headers, file_id, version_id } = await api.post<{
@@ -656,11 +697,19 @@ export function useUploadFile() {
       if (!res.ok) {
         throw new Error(`upload failed: ${res.status} ${res.statusText}`);
       }
-      return api.post<{ path: string; file_id: string; version_id: string; job_id: string }>(
-        `/api/files/${file_id}/versions/${version_id}/complete`,
-      );
+      return { file_id, version_id };
     },
-    onSuccess: () => {
+  });
+}
+
+export function useCompleteFileUpload() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ file_id, version_id }: FileUploadTarget) => api.post<FileUploadResult>(
+      `/api/files/${file_id}/versions/${version_id}/complete`,
+    ),
+    onSettled: () => {
+      // A lost response may still mean that completion committed on the server.
       qc.invalidateQueries({ queryKey: ["files"] });
     },
   });
@@ -669,8 +718,11 @@ export function useUploadFile() {
 export function useRetryFileJob() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (jobId: string) => api.post(`/api/jobs/${jobId}/retry`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["files"] }); },
+    mutationFn: (jobId: string) => api.post<FileJob>(`/api/jobs/${jobId}/retry`),
+    onSuccess: (job) => {
+      qc.setQueryData(["jobs", job.id], job);
+      qc.invalidateQueries({ queryKey: ["files"] });
+    },
   });
 }
 

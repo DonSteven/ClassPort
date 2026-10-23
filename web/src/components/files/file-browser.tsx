@@ -20,15 +20,18 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import {
   useCourses,
+  useCompleteFileUpload,
   useCreateFolder,
   useDeleteEntry,
   useFileSearch,
   useFilesList,
+  useFileJob,
   useMoveEntry,
   useSyncMaterials,
   useUploadFile,
   useRetryFileJob,
   type FileEntry,
+  type FileUploadTarget,
 } from "@/lib/queries";
 import { fmtDateShort } from "@/lib/time";
 import { cn } from "@/lib/cn";
@@ -39,6 +42,16 @@ import {
   DropdownTrigger,
 } from "@/components/ui/dropdown";
 import { FileViewer } from "./file-viewer";
+
+type UploadEntry = {
+  id: number;
+  name: string;
+  path: string;
+  state: "waiting" | "uploading" | "confirming" | "confirmation_failed" | "accepted" | "failed";
+  target?: FileUploadTarget;
+  job_id?: string;
+  error?: string;
+};
 
 export function FileBrowser({
   rootPrefix = "",
@@ -53,8 +66,11 @@ export function FileBrowser({
   const [openPath, setOpenPath] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const upload = useUploadFile();
+  const completeUpload = useCompleteFileUpload();
   const retryJob = useRetryFileJob();
-  const [uploads, setUploads] = useState<{ name: string; state: "waiting" | "uploading" | "uploaded" | "failed"; error?: string }[]>([]);
+  const [uploads, setUploads] = useState<UploadEntry[]>([]);
+  const nextUploadId = useRef(0);
+  const [uploadingBatch, setUploadingBatch] = useState(false);
   const createFolder = useCreateFolder();
   const deleteEntry = useDeleteEntry();
   const moveEntry = useMoveEntry();
@@ -66,33 +82,61 @@ export function FileBrowser({
   const { data, isPending, error } = useFilesList(prefix);
   const visible = data ?? [];
 
+  function updateUpload(id: number, changes: Partial<UploadEntry>) {
+    setUploads((current) => current.map((entry) => entry.id === id ? { ...entry, ...changes } : entry));
+  }
+
+  async function confirmUpload(entry: UploadEntry, target: FileUploadTarget) {
+    updateUpload(entry.id, { state: "confirming", target, error: undefined });
+    try {
+      const result = await completeUpload.mutateAsync(target);
+      updateUpload(entry.id, { state: "accepted", job_id: result.job_id });
+      toast.success(t("files.uploadedName", { name: entry.name }));
+    } catch (err) {
+      updateUpload(entry.id, { state: "confirmation_failed", error: (err as Error).message });
+      toast.error(t("files.confirmationFailedName", { name: entry.name }));
+    }
+  }
+
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     e.target.value = "";
     if (files.length === 0) return;
-    setUploads(files.map((file) => ({ name: file.name, state: "waiting" })));
-    const update = (index: number, state: "uploading" | "uploaded" | "failed", error?: string) =>
-      setUploads((current) => current.map((entry, i) => i === index ? { ...entry, state, error } : entry));
-    for (const [index, file] of files.entries()) {
-      const path = prefix ? `${prefix}/${file.name}` : file.name;
-      update(index, "uploading");
-      try {
-        await upload.mutateAsync({ file, path });
-        update(index, "uploaded");
-        toast.success(t("files.uploadedName", { name: file.name }));
-      } catch (err) {
-        update(index, "failed", (err as Error).message);
-        toast.error(
-          t("files.uploadFailed", { name: file.name, msg: (err as Error).message || "—" })
-        );
+    const entries: UploadEntry[] = files.map((file) => ({
+      id: nextUploadId.current++, name: file.name,
+      path: prefix ? `${prefix}/${file.name}` : file.name, state: "waiting",
+    }));
+    setUploads((current) => [...current, ...entries]);
+    setUploadingBatch(true);
+    try {
+      for (const [index, file] of files.entries()) {
+        const entry = entries[index];
+        updateUpload(entry.id, { state: "uploading" });
+        let target: FileUploadTarget;
+        try {
+          target = await upload.mutateAsync({ file, path: entry.path });
+        } catch (err) {
+          updateUpload(entry.id, { state: "failed", error: (err as Error).message });
+          toast.error(t("files.uploadFailed", { name: file.name, msg: (err as Error).message || "—" }));
+          continue;
+        }
+        await confirmUpload(entry, target);
       }
+    } finally {
+      setUploadingBatch(false);
     }
   }
 
-  async function onRetry(entry: FileEntry) {
+  async function onRetry(entry: Pick<FileEntry, "name" | "path" | "job_id">) {
     if (!entry.job_id) return;
     try {
       await retryJob.mutateAsync(entry.job_id);
+      const tracked: UploadEntry = {
+        id: nextUploadId.current++, name: entry.name, path: entry.path,
+        state: "accepted", job_id: entry.job_id,
+      };
+      setUploads((current) => current.some((item) => item.job_id === entry.job_id)
+        ? current : [...current, tracked]);
       toast.success(t("files.retryQueued"));
     } catch (err) {
       toast.error((err as Error).message);
@@ -210,10 +254,19 @@ export function FileBrowser({
 
       {uploads.length > 0 && (
         <ul className="space-y-1 text-xs text-muted" aria-live="polite">
-          {uploads.map((entry, i) => (
-            <li key={i} className={entry.state === "failed" ? "text-critical" : ""}>
-              {entry.name} · {t(`files.uploadStates.${entry.state}`)}
+          {uploads.map((entry) => (
+            <li key={entry.id} className={entry.state === "failed" || entry.state === "confirmation_failed" ? "text-critical" : ""}>
+              {entry.name} · {entry.job_id ? (
+                <UploadJobProgress jobId={entry.job_id} retrying={retryJob.isPending}
+                  onRetry={() => onRetry({ ...entry, job_id: entry.job_id! })} />
+              ) : t(`files.uploadStates.${entry.state}`)}
               {entry.error && `: ${entry.error}`}
+              {entry.state === "confirmation_failed" && entry.target && (
+                <button type="button" className="ml-2 underline"
+                  onClick={() => confirmUpload(entry, entry.target!)}>
+                  {t("files.confirmAgain")}
+                </button>
+              )}
             </li>
           ))}
         </ul>
@@ -278,10 +331,10 @@ export function FileBrowser({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={upload.isPending}
+            disabled={uploadingBatch}
             className="touch-target inline-flex items-center gap-2 rounded-md border border-border/60 bg-surface-2 hover:bg-surface-2/80 px-3 text-sm font-medium disabled:opacity-50 transition-colors"
           >
-            {upload.isPending ? (
+            {uploadingBatch ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Upload className="h-4 w-4" />
@@ -402,6 +455,36 @@ export function FileBrowser({
 
       {openPath && <FileViewer path={openPath} onClose={() => setOpenPath(null)} />}
     </div>
+  );
+}
+
+function UploadJobProgress({ jobId, retrying, onRetry }: {
+  jobId: string;
+  retrying: boolean;
+  onRetry: () => void;
+}) {
+  const { t } = useTranslation();
+  const job = useFileJob(jobId);
+  if (job.error) return (
+    <span>
+      {t("files.statusUnavailable")}
+      <button type="button" className="ml-2 underline" onClick={() => job.refetch()}>
+        {t("files.refreshStatus")}
+      </button>
+    </span>
+  );
+  if (!job.data) return <span>{t("files.uploadStates.accepted")}</span>;
+  const state = job.data;
+  return (
+    <span className={state.status === "failed" ? "text-critical" : ""}>
+      {t(`files.processingStates.${state.status}`)}
+      {state.last_error && ` · ${t(`files.processingErrors.${state.error_code}`, { defaultValue: state.last_error })}`}
+      {state.can_retry && (
+        <button type="button" className="ml-2 underline" disabled={retrying} onClick={onRetry}>
+          {t("files.retryProcessing")}
+        </button>
+      )}
+    </span>
   );
 }
 

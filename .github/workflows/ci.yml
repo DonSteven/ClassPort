@@ -69,7 +69,7 @@ jobs:
         run: docker build -t classport:ci-smoke .
 
   frontend:
-    name: Frontend (production build)
+    name: Frontend (tests + production build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -98,3 +98,5 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Production build
         run: pnpm build
+      - name: Frontend behavior tests
+        run: pnpm test

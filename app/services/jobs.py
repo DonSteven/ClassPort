@@ -250,8 +250,16 @@ async def retry(user_id: UUID, job_id: UUID) -> dict:
         job = await (await conn.execute(
             "SELECT * FROM jobs WHERE user_id = %s AND id = %s FOR UPDATE", (user_id, job_id),
         )).fetchone()
-        if not public({**job, **{k: file[k] for k in ("deleted_at", "current_version_id")}})["can_retry"]:
-            raise StorageConflict("job cannot be retried: it is active, permanent, deleted, or outdated")
+        if file["deleted_at"] is not None:
+            raise StorageConflict("This file was deleted. Upload it again to process it.")
+        if file["current_version_id"] != job["file_version_id"]:
+            raise StorageConflict("A newer file version is current. Retry that version instead.")
+        if job["status"] in ACTIVE:
+            raise StorageConflict("This file is already waiting or processing.")
+        if job["status"] != "failed":
+            raise StorageConflict("Only failed processing can be retried.")
+        if job["error_code"] not in RETRYABLE | {"unsupported_pipeline"}:
+            raise StorageConflict("This processing error cannot be retried. Replace the file and upload it again.")
         await conn.execute(
             """UPDATE jobs SET status = 'queued', next_run_at = clock_timestamp(),
                  execution_id = NULL, lease_until = NULL, finished_at = NULL,
