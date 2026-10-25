@@ -55,7 +55,9 @@ child creates its event loop after fork and uses that same loop for its pool.
 No connection is created in the Celery parent. Graceful exit closes the pool;
 forced termination is recovered through database leases.
 
-Workers currently mount the LocalStorage content root read-only. Coordinators
+Local workers mount the LocalStorage content root read-only. AWS production
+workers use fixed S3 versions and a restricted credential_process grant; see
+[S3_STORAGE.md](S3_STORAGE.md). Coordinators
 have no content mount, web session secret, migration credentials, or access to
 user credential tables. Redis exposes no host port. API readiness does not
 depend on Redis, so confirmed uploads can accumulate safely while it is down.
@@ -105,9 +107,8 @@ version, so restore regenerates the same task settings.
 Workers default to one child, a separate 1–2 connection pool, a 512 MiB memory
 limit and one CPU. `WORKER_CONCURRENCY` controls child count through Compose
 interpolation. Account for every child when budgeting database connections.
-Separate processes still share their host's total CPU and memory. Moving workers
-to another host also requires access to the content; the plan's S3 stage handles
-that later.
+Separate processes still share their host's total CPU and memory. Workers on another host need connectivity to the database, Redis and S3, plus
+the restricted material credentials. Production workers need no material disk.
 
 ## Rebuilds, delivery and recovery
 

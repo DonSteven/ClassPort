@@ -23,6 +23,12 @@ attrs==26.1.0
     #   referencing
 billiard==4.2.4
     # via celery
+boto3==1.43.9
+    # via classport-api
+botocore==1.43.9
+    # via
+    #   boto3
+    #   s3transfer
 celery==5.6.3
     # via classport-api
 certifi==2026.2.25
@@ -78,6 +84,10 @@ itsdangerous==2.2.0
     # via classport-api
 jinja2==3.1.6
     # via classport-api
+jmespath==1.1.0
+    # via
+    #   boto3
+    #   botocore
 jsonschema==4.26.0
     # via mcp
 jsonschema-specifications==2025.9.1
@@ -122,6 +132,7 @@ pyotp==2.9.0
     # via classport-api
 python-dateutil==2.9.0.post0
     # via
+    #   botocore
     #   celery
     #   classport-api
 python-dotenv==1.2.2
@@ -146,6 +157,8 @@ rpds-py==0.30.0
     # via
     #   jsonschema
     #   referencing
+s3transfer==0.17.0
+    # via boto3
 six==1.17.0
     # via python-dateutil
 sse-starlette==3.3.4
@@ -181,6 +194,8 @@ tzdata==2026.1
     #   tzlocal
 tzlocal==5.3.1
     # via celery
+urllib3==2.7.0
+    # via botocore
 uvicorn==0.44.0
     # via
     #   mcp

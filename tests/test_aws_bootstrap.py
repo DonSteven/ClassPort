@@ -149,3 +149,35 @@ def test_fresh_database_uses_separate_non_admin_runtime_role(monkeypatch):
             ):
                 with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
                     conn.execute(statement)
+
+
+@pytest.mark.parametrize("has_local_versions", [False, True])
+def test_s3_cutover_requires_completed_local_versions_to_be_migrated(tmp_path, monkeypatch, has_local_versions):
+    from unittest.mock import MagicMock
+    config = {key: "test-value" for key in bootstrap.REQUIRED_KEYS}
+    config.update(OPERATOR_EMAIL="operator@example.test", SMOKE_EMAIL="smoke@example.test",
+                  APP_DB_PASSWORD="runtime-only", MIGRATION_DB_PASSWORD="migration-only",
+                  SECRETS_ENCRYPTION_KEY=Fernet.generate_key().decode())
+    for key, value in {"S3_BUCKET": "test-materials", "AWS_REGION": "us-east-2",
+                       "DB_HOST": "database.example.test", "DB_NAME": "study",
+                       "PUBLIC_URL": "https://study.example.test"}.items():
+        monkeypatch.setenv(key, value)
+    for name in ("provision_roles", "grant_runtime_access", "seed_smoke"):
+        monkeypatch.setattr(bootstrap, name, lambda *args: None)
+    monkeypatch.setattr(bootstrap.subprocess, "run", Mock())
+    connection = MagicMock()
+    connection.__enter__.return_value.execute.return_value.fetchone.return_value = (has_local_versions,)
+    monkeypatch.setattr(bootstrap.psycopg, "connect", Mock(return_value=connection))
+    report = tmp_path / "result.json"
+    if has_local_versions:
+        with pytest.raises(ValueError, match="Local material"):
+            bootstrap.bootstrap(config, {"username": "admin", "password": "test-only"}, tmp_path, report)
+        assert not (tmp_path / ".env").exists()
+    else:
+        bootstrap.bootstrap(config, {"username": "admin", "password": "test-only"}, tmp_path, report)
+        runtime = (tmp_path / ".env").read_text()
+        assert "STORAGE_BACKEND=s3" in runtime and "S3_BUCKET=test-materials" in runtime
+        assert "AWS_PROFILE=classport-storage" in runtime
+        assert "AWS_EC2_METADATA_DISABLED=true" in runtime
+        assert "STORAGE_ROLE_ARN" not in runtime
+        assert "AWS_ACCESS_KEY_ID" not in runtime

@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import tempfile
 
-from .base import ObjectRef, StorageConflict, StorageNotFound, StorageUnavailable
+from .base import ObjectInfo, ObjectRef, StorageConflict, StorageNotFound, StorageUnavailable
 
 
 class LocalStorage:
@@ -44,11 +44,13 @@ class LocalStorage:
             finally:
                 name.unlink(missing_ok=True)
 
-    async def write(self, ref: ObjectRef, data: bytes) -> None:
+    async def write(self, ref: ObjectRef, data: bytes, *,
+                    content_type: str = "application/octet-stream") -> ObjectRef:
         await self._run(self._write, self._resolve(ref), data)
+        return ref
 
-    async def stat(self, ref: ObjectRef) -> int:
-        return (await self._run(self._resolve(ref).stat)).st_size
+    async def stat(self, ref: ObjectRef) -> ObjectInfo:
+        return ObjectInfo(ref, (await self._run(self._resolve(ref).stat)).st_size)
 
     async def delete(self, ref: ObjectRef) -> None:
         target = self._resolve(ref)
@@ -61,9 +63,13 @@ class LocalStorage:
     async def check_readable(self) -> None:
         await self._run(self._check_readable)
 
-    def upload_url(self, ref: ObjectRef, *, file_id: str, version_id: str) -> str:
-        return f"/api/files/upload-target?file_id={file_id}&version_id={version_id}"
+    def upload_url(self, ref: ObjectRef, *, file_id: str, version_id: str,
+                   content_type: str, sha256: str | None) -> dict:
+        return {"url": f"/api/files/upload-target?file_id={file_id}&version_id={version_id}",
+                "headers": {}, "expires_in": 3600}
 
     def download_url(self, ref: ObjectRef, *, file_id: str, version_id: str,
-                     expires_in: int = 3600) -> str:
-        return f"/api/files/raw?file_id={file_id}&version_id={version_id}"
+                     expires_in: int = 3600, filename: str = "",
+                     content_type: str = "application/octet-stream") -> dict:
+        return {"url": f"/api/files/raw?file_id={file_id}&version_id={version_id}",
+                "expires_in": expires_in}

@@ -88,7 +88,7 @@ async def test_failed_storage_does_not_change_current_version(client, monkeypatc
     from app.storage.local import LocalStorage
     from app.storage.base import StorageUnavailable
     await files.upload(USER, "lecture.pdf", b"old")
-    async def fail(*args):
+    async def fail(*args, **kwargs):
         raise StorageUnavailable("unavailable")
     monkeypatch.setattr(LocalStorage, "write", fail)
     with pytest.raises(StorageUnavailable):

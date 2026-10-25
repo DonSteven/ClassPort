@@ -8,7 +8,11 @@ from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
+import asyncio
+
+from ..storage import get_storage
+from ..storage.base import ObjectRef
 
 from .. import db
 from ..auth import require_user, User
@@ -42,19 +46,29 @@ async def list_files(prefix: str = "", limit: int = Query(500, ge=1, le=1000),
 @router.get("/signed-url")
 async def signed_url(path: str, expires_in: int = Query(3600, ge=60, le=86400),
                      user: User = Depends(require_user)) -> dict:
-    # Local URLs use the authenticated session; the URL pins the resolved version.
-    return {"url": await intent.signed_url(user.id, path, expires_in), "expires_in": expires_in}
+    return await intent.signed_url(user.id, path, expires_in)
 
 
 @router.post("/upload-url")
 async def upload_url(body: dict = Body(...), user: User = Depends(require_user)) -> dict:
     path = _safe_key(_sanitize_path(_safe_key(body.get("path") or "")))
-    return await intent.signed_upload_url(user.id, path)
+    return await intent.signed_upload_url(user.id, path, size=body.get("size"),
+                                          sha256=body.get("sha256"), content_type=body.get("content_type"))
 
 
 @router.put("/upload-target")
 async def upload_target(request: Request, file_id: UUID, version_id: UUID,
                         user: User = Depends(require_user)) -> dict:
+    row = await db.fetchrow(
+        """SELECT v.storage_backend FROM file_versions v JOIN files f
+             ON f.user_id = v.user_id AND f.id = v.file_id
+           WHERE v.user_id = %s AND v.file_id = %s AND v.id = %s AND f.deleted_at IS NULL""",
+        user.id, file_id, version_id,
+    )
+    if row is None:
+        raise HTTPException(404, "file version not found")
+    if row["storage_backend"] != "local":
+        raise HTTPException(409, "upload this version directly to the issued storage URL")
     return await intent.accept_upload(user.id, file_id, version_id, await request.body(),
                                       request.headers.get("content-type"))
 
@@ -66,9 +80,12 @@ async def create_folder(body: dict = Body(...), user: User = Depends(require_use
 
 
 @router.post("/{file_id}/versions/{version_id}/complete")
-async def complete_upload(file_id: UUID, version_id: UUID,
+async def complete_upload(file_id: UUID, version_id: UUID, body: dict = Body(default={}),
                           user: User = Depends(require_user)) -> dict:
-    return await intent.complete_upload(user.id, file_id, version_id)
+    candidate = body.get("object_version")
+    if candidate is not None and (not isinstance(candidate, str) or not candidate or len(candidate) > 1024):
+        raise HTTPException(400, "invalid object version")
+    return await intent.complete_upload(user.id, file_id, version_id, candidate)
 
 
 @router.post("/move")
@@ -118,6 +135,13 @@ async def raw_file(request: Request, path: str | None = None, file_id: UUID | No
         meta = await intent.current_version(user.id, path)
     else:
         raise HTTPException(400, "provide a path or a file and version ID")
+    if meta["storage_backend"] == "s3":
+        target = await asyncio.to_thread(
+            get_storage("s3").download_url, ObjectRef(meta["object_key"], meta["object_version"]),
+            file_id=meta["file_id"], version_id=meta["id"],
+            filename=meta["logical_path"].rsplit("/", 1)[-1], content_type=meta["content_type"],
+        )
+        return RedirectResponse(target["url"], status_code=307, headers={"Cache-Control": "private, no-store"})
     data = await intent.read_version(user.id, meta["file_id"], meta["id"])
     name = meta["logical_path"].rsplit("/", 1)[-1]
     mime = meta["content_type"]

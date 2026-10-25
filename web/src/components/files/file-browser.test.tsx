@@ -1,3 +1,4 @@
+import { webcrypto } from "node:crypto";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,7 +7,7 @@ import "@/lib/i18n";
 import { FileBrowser } from "./file-browser";
 
 const clients: QueryClient[] = [];
-beforeEach(async () => { await i18n.changeLanguage("en"); });
+beforeEach(async () => { vi.stubGlobal("crypto", webcrypto); await i18n.changeLanguage("en"); });
 afterEach(() => clients.splice(0).forEach((client) => client.clear()));
 
 function renderBrowser() {
@@ -106,4 +107,39 @@ describe("upload and processing feedback", () => {
     expect(fetch.mock.calls.filter(([path]) => String(path).endsWith("/complete"))).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Upload" }).hasAttribute("disabled")).toBe(false);
   });
+});
+
+it("retains the S3 object version when confirmation must be repeated", async () => {
+  let confirmations = 0;
+  const bodies: unknown[] = [];
+  const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    if (path === "/api/files/upload-url") {
+      const metadata = JSON.parse(String(init?.body));
+      expect(metadata.size).toBe(4);
+      expect(metadata.sha256).toMatch(/^[0-9a-f]{64}$/);
+      return json({ url: "https://materials.example.test/content", headers: {
+        "Content-Type": "text/plain", "x-amz-checksum-sha256": "signed-checksum",
+      }, file_id: "file-1", version_id: "version-1", storage_backend: "s3" });
+    }
+    if (path === "https://materials.example.test/content") {
+      expect(init?.credentials).toBe("omit");
+      expect(init?.headers).toEqual({ "Content-Type": "text/plain", "x-amz-checksum-sha256": "signed-checksum" });
+      return new Response(null, { headers: { "x-amz-version-id": "fixed-s3-version" } });
+    }
+    if (path.endsWith("/complete")) {
+      bodies.push(JSON.parse(String(init?.body)));
+      if (++confirmations === 1) throw new TypeError("Response lost");
+      return json({ job_id: "job-1", job_status: "queued" });
+    }
+    if (path === "/api/jobs/job-1") return json({ status: "succeeded", can_retry: false });
+    return json([]);
+  });
+  vi.stubGlobal("fetch", fetch);
+  const { container } = renderBrowser();
+  selectFiles(container, new File(["data"], "notes.txt", { type: "text/plain" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Confirm again" }));
+  await screen.findByText("Processing complete");
+  expect(bodies).toEqual([{ object_version: "fixed-s3-version" }, { object_version: "fixed-s3-version" }]);
+  expect(fetch.mock.calls.filter(([path]) => path === "https://materials.example.test/content")).toHaveLength(1);
 });

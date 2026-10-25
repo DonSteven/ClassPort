@@ -4,6 +4,8 @@ Cloud commands are deliberately separate from application release. Run as root;
 credentials exist only in a private temporary directory and maintenance containers.
 """
 import argparse
+import base64
+import hashlib
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import fcntl
@@ -22,7 +24,7 @@ from uuid import uuid4
 
 PG_IMAGE = "postgres:16-alpine"
 CURRENT_STAGE = "preflight"
-RELEASE_FILES = ("release.env", "docker-compose.prod.yml", "deploy-prod.sh", "bootstrap.py", "recovery.py")
+RELEASE_FILES = ("release.env", "docker-compose.prod.yml", "deploy-prod.sh", "bootstrap.py", "recovery.py", "storage_credentials.py")
 WRITERS = ("classport", "frontend", "worker", "dispatcher", "job-recovery")
 STATE_SQL = """SELECT json_build_object(
  'migrations', (SELECT json_agg(m ORDER BY filename) FROM public._migrations m),
@@ -31,7 +33,11 @@ STATE_SQL = """SELECT json_build_object(
  'files', (SELECT count(*) FROM files), 'file_versions', (SELECT count(*) FROM file_versions),
  'jobs', (SELECT count(*) FROM jobs), 'job_attempts', (SELECT count(*) FROM job_attempts),
  'references', (SELECT coalesce(json_agg(object_key ORDER BY object_key), '[]')
-                FROM file_versions WHERE storage_backend = 'local' AND upload_status = 'completed'))"""
+                FROM file_versions WHERE storage_backend = 'local' AND upload_status = 'completed'),
+ 's3_references', (SELECT coalesce(json_agg(json_build_object(
+       'id', id, 'key', object_key, 'version_id', object_version, 'bytes', size,
+       'sha256', sha256, 'content_type', content_type) ORDER BY id), '[]')
+       FROM file_versions WHERE storage_backend = 's3' AND upload_status = 'completed'))"""
 
 
 def progress(stage):
@@ -60,6 +66,66 @@ def save_json(path, value):
 
 def aws(*args):
     return json.loads(run(["aws", *args, "--output", "json"]) or "{}")
+
+
+def material_aws(*args):
+    # Read the current atomic grant for each operation; only the child gets it.
+    grant = json.loads(Path("/run/classport-storage/credentials.json").read_text())
+    result = subprocess.run(["aws", "s3api", *map(str, args), "--output", "json"],
+        env={**os.environ, "AWS_ACCESS_KEY_ID": grant["AccessKeyId"],
+             "AWS_SECRET_ACCESS_KEY": grant["SecretAccessKey"], "AWS_SESSION_TOKEN": grant["SessionToken"]},
+        capture_output=True, text=True)
+    if result.returncode:
+        raise RuntimeError("Material backup/restore operation failed; output omitted")
+    return json.loads(result.stdout or "{}")
+
+
+def verify_material(path, reference):
+    with path.open("rb") as content:
+        digest = hashlib.file_digest(content, "sha256").hexdigest()
+    if path.stat().st_size != reference["bytes"] or digest != reference["sha256"]:
+        raise ValueError("Material backup differs from its confirmed version")
+
+
+def backup_materials(work, settings, state, prefix):
+    records = []
+    for reference in state.get("s3_references", []):
+        path = work / "material-content"
+        material_aws("get-object", "--bucket", settings["S3_BUCKET"], "--key", reference["key"],
+                     "--version-id", reference["version_id"], path)
+        verify_material(path, reference)
+        copied = upload(path, settings["BACKUP_BUCKET"], prefix + "materials/" + reference["id"])
+        records.append({**reference, "backup": copied})
+        path.unlink()
+    return records
+
+
+def restore_materials(work, root, config, settings, records):
+    mappings = []
+    for record in records:
+        path = work / "material-content"
+        download(settings["BACKUP_BUCKET"], record["backup"], path)
+        verify_material(path, record)
+        result = material_aws("put-object", "--bucket", settings["S3_BUCKET"], "--key", record["key"],
+            "--body", path, "--content-type", record["content_type"], "--checksum-algorithm", "SHA256",
+            "--checksum-sha256", base64.b64encode(bytes.fromhex(record["sha256"])).decode())
+        version = result.get("VersionId")
+        if not version or version == "null":
+            raise ValueError("Restore target must have S3 versioning enabled")
+        mappings.append({"id": record["id"], "object_version": version})
+        path.unlink()
+    if mappings:
+        (work / "material-mappings.json").write_text(json.dumps(mappings) + "\n")
+        # psql reads the JSON inside its mounted /backup directory, not on RDS.
+        (work / "material-mappings.sql").write_text(r"""BEGIN;
+CREATE TEMP TABLE material_mapping (payload jsonb);
+\copy material_mapping FROM '/backup/material-mappings.json' WITH (FORMAT csv, DELIMITER E'\t', QUOTE E'\x01')
+UPDATE file_versions v SET object_version = m.object_version
+FROM material_mapping, jsonb_to_recordset(payload) AS m(id uuid, object_version text)
+WHERE v.id = m.id AND v.storage_backend = 's3';
+COMMIT;
+""")
+        pg(work, root, config, settings, "psql", "-X", "-v", "ON_ERROR_STOP=1", "-f", "/backup/material-mappings.sql")
 
 
 def read_env(path):
@@ -229,6 +295,7 @@ def backup(root, settings):
                     archive.add(release / name, arcname=name)
             progress("backup.upload")
             prefix = "backups/" + manifest["backup_id"] + "/"
+            manifest["materials"] = backup_materials(work, settings, manifest["database_state"], prefix)
             manifest["objects"] = {name: upload(work / name, settings["BACKUP_BUCKET"], prefix + name)
                                    for name in ("database.dump", "courses.tar.gz", "release.tar.gz")}
             manifest["finished_at"] = now()
@@ -251,7 +318,8 @@ def phase(work, root, config, master, settings, backend, name):
     (work / "application.json").write_text(json.dumps(config))
     (work / "database.json").write_text(json.dumps(master))
     write_private(work / "maintenance.env", {key: settings[key] for key in ("DB_HOST", "DB_NAME", "PUBLIC_URL")}
-                  | {"DB_PORT": settings.get("DB_PORT", "5432")})
+                  | {"DB_PORT": settings.get("DB_PORT", "5432"),
+                     **{key: settings[key] for key in ("S3_BUCKET", "AWS_REGION") if key in settings}})
     run(["docker", "run", "--rm", "--network", "host", "--log-driver", "local",
          "--env-file", work / "maintenance.env", "-v", f"{work}:/run/secrets:ro",
          "-v", f"{root}:/deployment", "-v", f"{root / 'certs'}:/etc/classport/certs:ro",
@@ -287,7 +355,7 @@ def restore(root, settings, args):
                 or args.target_db_secret_arn == manifest["database"]["admin_secret_arn"]):
             raise ValueError("Restore requires a separate PostgreSQL instance")
         target = {**settings, "DB_HOST": args.target_host, "DB_NAME": args.target_database,
-                  "PUBLIC_URL": args.public_url}
+                  "PUBLIC_URL": args.public_url, "BACKUP_BUCKET": args.backup_bucket}
         secret = manifest["configuration"]
         config = json.loads(aws("secretsmanager", "get-secret-value", "--secret-id", secret["secret_arn"],
                                "--version-id", secret["version_id"])["SecretString"])
@@ -327,6 +395,12 @@ def restore(root, settings, args):
         if state != manifest["database_state"]:
             raise ValueError("Restored database counts, references or migration records differ")
         check_files(courses, state, manifest["files"])
+        if manifest.get("materials"):
+            if not target.get("S3_BUCKET") or not target.get("STORAGE_ROLE_ARN"):
+                raise ValueError("S3 restore requires the target material bucket and restricted role")
+            subprocess.run(["python3", str(release / "storage_credentials.py"), "install"],
+                           env={**os.environ, **target}, check=True)
+            restore_materials(work, root, config, target, manifest["materials"])
         progress("restore.configuration")
         phase(work, root, config, master, target, version["BACKEND_IMAGE"], "configure")
         (root / "releases/current").symlink_to(release)
@@ -349,6 +423,7 @@ def restore(root, settings, args):
         run(["docker", "run", "--rm", "--network", "host", "--log-driver", "local",
              "--env-file", root / ".env", "--env-file", root / ".env.smoke", "--env-file", work / "verify.env",
              "-v", f"{work}:/run/secrets:ro", "-v", f"{courses}:/opt/courses:ro",
+             *(["-v", "/run/classport-storage:/run/classport-storage:ro"] if manifest.get("materials") else []),
              "-v", f"{root / 'certs'}:/etc/classport/certs:ro", version["BACKEND_IMAGE"],
              "uv", "run", "--no-sync", "python", "scripts/smoke_restore.py"])
         report = {"status": "passed", "backup_id": manifest["backup_id"], "consistent_at": manifest["consistent_at"],

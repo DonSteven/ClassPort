@@ -12,7 +12,7 @@ async def test_local_round_trip_and_delete(tmp_path):
     ref = ObjectRef("objects/user/file/version/content")
     await store.write(ref, b"PDF data")
     assert await store.read(ref) == b"PDF data"
-    assert await store.stat(ref) == 8
+    assert (await store.stat(ref)).size == 8
     await store.delete(ref)
     await store.delete(ref)
     with pytest.raises(StorageNotFound):

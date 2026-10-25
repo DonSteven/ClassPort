@@ -1,6 +1,7 @@
 """Exercise the frontend, authenticated REST API and MCP through one origin."""
 from __future__ import annotations
 
+import hashlib
 import asyncio
 from html.parser import HTMLParser
 import os
@@ -70,13 +71,20 @@ async def check_release(base_url: str, email: str, password: str, token: str) ->
         path = f"_release_checks/{marker}.txt"
         content = f"{marker} file processing check".encode()
         try:
-            target = await client.post("/api/files/upload-url", json={"path": path})
+            target = await client.post("/api/files/upload-url", json={
+                "path": path, "size": len(content), "sha256": hashlib.sha256(content).hexdigest(),
+                "content_type": "text/plain",
+            })
             target.raise_for_status()
             upload = target.json()
-            received = await client.put(upload["url"], content=content,
-                                        headers={"Content-Type": "text/plain", **upload["headers"]})
+            # A separate client never forwards the application's session cookie to S3.
+            async with httpx.AsyncClient(base_url=base_url, timeout=20, trust_env=False) as transfer:
+                received = await transfer.put(upload["url"], content=content,
+                    headers={**upload["headers"], **({"Cookie": f"study_session={cookie}"}
+                             if upload["url"].startswith("/") else {})})
             received.raise_for_status()
-            completed = await client.post(f"/api/files/{upload['file_id']}/versions/{upload['version_id']}/complete")
+            completed = await client.post(f"/api/files/{upload['file_id']}/versions/{upload['version_id']}/complete",
+                                          json={"object_version": received.headers.get("x-amz-version-id")})
             completed.raise_for_status()
             job_id = completed.json()["job_id"]
             async with asyncio.timeout(35):
@@ -94,7 +102,7 @@ async def check_release(base_url: str, email: str, password: str, token: str) ->
             if not any(hit["file_id"] == upload["file_id"] for hit in result.json()):
                 raise ValueError("processed file is not searchable")
             downloaded = await client.get("/api/files/raw", params={"file_id": upload["file_id"],
-                                                                    "version_id": upload["version_id"]})
+                                                                    "version_id": upload["version_id"]}, follow_redirects=True)
             downloaded.raise_for_status()
             if downloaded.content != content:
                 raise ValueError("processed file download differs")

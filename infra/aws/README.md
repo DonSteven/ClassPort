@@ -10,8 +10,11 @@ Caddy obtains and renews a public HTTPS certificate once a real domain is
 configured, and forwards to the existing frontend on `127.0.0.1:8080`. With no
 domain it serves only a configuration notice on HTTP, requests no certificates
 and blocks application releases. Existing app routes and MCP streaming are preserved.
-The AWS region defaults to `us-east-1` and can be overridden with `aws_region`.
+The AWS region defaults to `us-east-2` and can be overridden with `aws_region`.
 DNS is managed in Cloudflare; this module creates no Route 53 resources.
+
+The current preparation status, validation results, and account/domain/GitHub
+steps are recorded in [the cloud setup report](../../docs/CLOUD_SETUP_REPORT.md).
 
 This is a small single-host installation, without high availability or a NAT
 gateway. EC2, EBS, RDS, public IPv4, Secrets Manager, logs and S3 usage incur AWS
@@ -61,6 +64,11 @@ credential source. For example, configure and log in with `aws configure sso
 Terraform and administrative SSM. Terraform and AWS CLI use the normal credential
 chain; never put access keys in `.tfvars`, user data or Git. `aws sts
 get-caller-identity` can confirm the intended account without printing keys.
+An existing console login profile created with `aws login --profile classport`
+is also supported by the installed provider. Select it with
+`export AWS_PROFILE=classport` before planning; the provider must be able to
+refresh that profile's short-lived cache under `~/.aws/login/cache`. No static
+access keys or credential-export wrapper are needed for this checkout.
 The provisioning identity needs IAM/PassRole permissions and access to the listed
 services; the GitHub release role gets scoped ECR/SSM rights, the configuration operator needs
 `secretsmanager:PutSecretValue` on this application secret, and the administrator
@@ -71,7 +79,7 @@ Once the account and real domain are ready, from the repository root:
 ```bash
 cp infra/aws/terraform.tfvars.example infra/aws/terraform.tfvars
 # Set a unique environment name and your real domain_name; acme_email is optional.
-# Override aws_region if needed (default us-east-1).
+# Override aws_region if needed (default us-east-2).
 terraform -chdir=infra/aws init
 terraform -chdir=infra/aws fmt -check -recursive
 terraform -chdir=infra/aws validate
@@ -247,3 +255,12 @@ Do not use destroy as an application rollback.
 Reference installation behavior: [Docker on Ubuntu](https://docs.docker.com/engine/install/ubuntu/),
 [Caddy packages](https://caddyserver.com/docs/install#debian-ubuntu-raspbian),
 [RDS administrator privileges](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Appendix.PostgreSQL.CommonDBATasks.Roles.rds_superuser.html).
+
+## S3 material runtime
+
+The material bucket is separate from backups, private, encrypted and versioned.
+The updated host environment carries its bucket name and restricted role ARN.
+The backend release installs the host STS rotation service before starting the
+API/worker, which mount only its isolated credential directory. Keep IMDS hop
+limit 1. See [S3 storage](../../docs/S3_STORAGE.md) for the protocol, existing-data
+cutover and real AWS acceptance requirements.

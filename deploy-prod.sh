@@ -162,7 +162,7 @@ else
     load_manifest "$bundle/release.env"
     candidate=$(mktemp -d "$STATE/$RELEASE_COMMIT.XXXXXXXX")
     cp "$bundle/release.env" "$bundle/docker-compose.prod.yml" "$bundle/deploy-prod.sh" "$candidate/"
-    for helper in bootstrap.py recovery.py; do
+    for helper in bootstrap.py recovery.py storage_credentials.py; do
         [ ! -f "$bundle/$helper" ] || cp "$bundle/$helper" "$candidate/"
     done
 fi

@@ -143,6 +143,10 @@ def configure_runtime(config, root):
         "PUBLIC_URL": os.environ["PUBLIC_URL"], "CORS_ORIGINS": os.environ["PUBLIC_URL"],
         "OPERATOR_EMAIL": config["OPERATOR_EMAIL"].strip().lower(), "OPERATOR_USER_ID": OPERATOR_ID,
         "SIGNUPS_ENABLED": "false",
+        **({"STORAGE_BACKEND": "s3", "S3_BUCKET": os.environ["S3_BUCKET"],
+            "AWS_REGION": os.environ["AWS_REGION"], "AWS_PROFILE": "classport-storage",
+            "AWS_CONFIG_FILE": "/run/classport-storage/config", "AWS_EC2_METADATA_DISABLED": "true"}
+           if os.environ.get("S3_BUCKET") else {}),
     })
     write_env(root / ".env.smoke", {
         "SMOKE_BASE_URL": os.environ["PUBLIC_URL"], "SMOKE_EMAIL": config["SMOKE_EMAIL"].strip().lower(),
@@ -209,7 +213,14 @@ def bootstrap(config, master, root, result_path):
 
     step("accounts", accounts)
 
-    step("configuration", lambda: configure_runtime(config, root))
+    def configuration():
+        if os.environ.get("S3_BUCKET"):
+            with psycopg.connect(migration_dsn) as conn:
+                if conn.execute("SELECT EXISTS (SELECT 1 FROM file_versions WHERE storage_backend='local' AND upload_status='completed')").fetchone()[0]:
+                    print("S3 cutover requires B8 migration of completed local versions.", file=sys.stderr)
+                    raise ValueError("Local material versions remain")
+        configure_runtime(config, root)
+    step("configuration", configuration)
     report.update(status="succeeded", finished_at=datetime.now(timezone.utc).isoformat())
     save()
     print("AWS database identities, operator and release checks are ready.")

@@ -6,6 +6,23 @@ versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### 2026-10-24
+
+#### Added
+
+- **S3 direct uploads.** Upload browser bytes directly to a private,
+  versioned material bucket. Confirm the exact S3 object version after checking
+  size, SHA-256 and content type, and pin downloads, previews, MCP reads and
+  worker processing to that confirmed version.
+- **S3 operations.** Provision the material bucket, CORS and restricted
+  storage role with Terraform. Refresh short-lived runtime credentials without
+  restarting containers and support backup and independent recovery of the
+  referenced S3 object versions.
+- **Upload benchmarks.** Add a browser benchmark and checked-in local
+  Chromium/PostgreSQL/Moto measurements comparing API-handled uploads with S3
+  direct uploads, including latency, API traffic, CPU and memory. Real AWS
+  IAM, signature and CORS acceptance remains pending.
+
 ### 2026-10-23
 
 #### Added

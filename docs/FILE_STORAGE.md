@@ -1,5 +1,8 @@
 # Local versioned files
 
+This page describes LocalStorage and legacy import. AWS production storage and
+the direct-upload protocol are documented in [S3_STORAGE.md](S3_STORAGE.md).
+
 File names, directories, ownership and the current version come from PostgreSQL
 `files` and `file_versions`. Content is stored beneath `STUDY_ROOT` as
 `objects/<user_id>/<file_id>/<version_id>/content`. Logical paths never determine

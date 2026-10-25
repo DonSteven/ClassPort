@@ -55,6 +55,8 @@ locals {
     "FRONTEND_REPOSITORY=${aws_ecr_repository.images["frontend"].repository_url}",
     "DATA_VOLUME_ID=${aws_ebs_volume.data.id}",
     "BACKUP_BUCKET=${aws_s3_bucket.backups.id}",
+    "S3_BUCKET=${aws_s3_bucket.materials.id}",
+    "STORAGE_ROLE_ARN=${aws_iam_role.storage.arn}",
     "ENVIRONMENT=${var.name}",
     "", # trailing newline
   ])

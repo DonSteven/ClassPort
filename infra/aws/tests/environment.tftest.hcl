@@ -2,7 +2,7 @@
 mock_provider "aws" {
   override_during = plan
   mock_data "aws_availability_zones" {
-    defaults = { names = ["us-east-1a", "us-east-1b"] }
+    defaults = { names = ["us-east-2a", "us-east-2b"] }
   }
   mock_data "aws_ami" {
     defaults = { id = "ami-0123456789abcdef0", name = "ubuntu-noble-24.04-amd64-server-test" }
@@ -16,17 +16,20 @@ mock_provider "aws" {
   mock_resource "aws_db_instance" {
     defaults = {
       address            = "database.example.rds.amazonaws.com"
-      master_user_secret = [{ secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:rds-master-test", secret_status = "active", kms_key_id = "test" }]
+      master_user_secret = [{ secret_arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:rds-master-test", secret_status = "active", kms_key_id = "test" }]
     }
   }
   mock_resource "aws_secretsmanager_secret" {
-    defaults = { arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:application-test" }
+    defaults = { arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:application-test" }
   }
   mock_resource "aws_ecr_repository" {
     defaults = {
-      arn            = "arn:aws:ecr:us-east-1:123456789012:repository/classport"
-      repository_url = "123456789012.dkr.ecr.us-east-1.amazonaws.com/classport"
+      arn            = "arn:aws:ecr:us-east-2:123456789012:repository/classport"
+      repository_url = "123456789012.dkr.ecr.us-east-2.amazonaws.com/classport"
     }
+  }
+  mock_resource "aws_iam_role" {
+    defaults = { arn = "arn:aws:iam::123456789012:role/classport-test" }
   }
   mock_resource "aws_ebs_volume" {
     defaults = { id = "vol-0123456789abcdef0" }
@@ -38,10 +41,10 @@ mock_provider "aws" {
     defaults = { arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com" }
   }
   mock_resource "aws_cloudwatch_log_group" {
-    defaults = { arn = "arn:aws:logs:us-east-1:123456789012:log-group:/classport/containers" }
+    defaults = { arn = "arn:aws:logs:us-east-2:123456789012:log-group:/classport/containers" }
   }
   mock_resource "aws_s3_bucket" {
-    defaults = { arn = "arn:aws:s3:::classport-backups" }
+    defaults = { arn = "arn:aws:s3:::classport-backups", id = "classport-test-bucket" }
   }
   override_resource {
     target          = aws_security_group.app
@@ -67,8 +70,8 @@ run "github_deployment_is_scoped_to_one_production_subject" {
     condition = (
       length(jsondecode(aws_iam_role_policy.github[0].policy).Statement[1].Resource) == 2 &&
       jsondecode(aws_iam_role_policy.github[0].policy).Statement[2].Resource == [
-        "arn:aws:ssm:us-east-1::document/AWS-RunShellScript",
-        "arn:aws:ec2:us-east-1:123456789012:instance/i-0123456789abcdef0"
+        "arn:aws:ssm:us-east-2::document/AWS-RunShellScript",
+        "arn:aws:ec2:us-east-2:123456789012:instance/i-0123456789abcdef0"
       ] &&
       !strcontains(aws_iam_role_policy.github[0].policy, "secretsmanager:") &&
       !strcontains(aws_iam_role_policy.github[0].policy, "iam:")
@@ -102,6 +105,8 @@ run "minimum_private_environment" {
 
   assert {
     condition = (
+      output.aws_region == "us-east-2" &&
+      aws_subnet.public.availability_zone == "us-east-2a" &&
       length(aws_instance.app.user_data_base64) <= 21848 &&
       length(yamldecode(local.cloud_init).write_files) == 5 &&
       !strcontains(local.cloud_init, "/opt/classport/aws/")
@@ -198,5 +203,31 @@ run "operations_and_recovery_are_scoped" {
       strcontains(aws_iam_role_policy.app.policy, "cloudwatch:namespace")
     )
     error_message = "Source backup writes, recovery reads and namespaced metrics must retain separate permissions."
+  }
+}
+
+run "private_versioned_materials_and_restricted_runtime" {
+  command = plan
+  assert {
+    condition = (
+      aws_s3_bucket.materials.bucket != aws_s3_bucket.backups.bucket &&
+      aws_s3_bucket_public_access_block.materials.block_public_policy &&
+      aws_s3_bucket_public_access_block.materials.block_public_acls &&
+      aws_s3_bucket_versioning.materials.versioning_configuration[0].status == "Enabled" &&
+      aws_s3_bucket_server_side_encryption_configuration.materials.rule != null &&
+      !aws_s3_bucket.materials.force_destroy
+    )
+    error_message = "Business materials must use a separate private, encrypted, versioned bucket."
+  }
+  assert {
+    condition = (
+      one(aws_s3_bucket_cors_configuration.materials[0].cors_rule).allowed_origins == toset([local.public_url]) &&
+      contains(one(aws_s3_bucket_cors_configuration.materials[0].cors_rule).expose_headers, "x-amz-version-id") &&
+      !strcontains(aws_iam_role_policy.storage.policy, "secretsmanager:") &&
+      !strcontains(aws_iam_role_policy.storage.policy, "s3:DeleteObject\"") &&
+      strcontains(aws_iam_role_policy.storage.policy, "s3:GetObjectVersion") &&
+      aws_instance.app.metadata_options[0].http_put_response_hop_limit == 1
+    )
+    error_message = "Expose the confirmed version to the site without giving containers host administration or unversioned deletion."
   }
 }

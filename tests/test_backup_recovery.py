@@ -176,3 +176,84 @@ def test_monitor_reports_task_metrics_through_the_coordinator(host, monkeypatch)
     assert metrics["JobMetricsReady"] == 1 and metrics["JobWaitingAgeSeconds"] == 42
     assert metrics["JobExpiredLeases"] == 1
     assert metrics["BackupAgeSeconds"] > 93600
+
+
+def test_s3_backup_keeps_independent_copy_and_restore_uses_new_version(host, tmp_path, monkeypatch):
+    import hashlib
+    root, settings, objects, calls = host
+    data = b"confirmed remote PDF bytes"
+    reference = {"id": "00000000-0000-0000-0000-000000000123", "key": "objects/user/file/version/content",
+                 "version_id": "source-version", "bytes": len(data),
+                 "sha256": hashlib.sha256(data).hexdigest(), "content_type": "application/pdf"}
+    settings.update(S3_BUCKET="source-materials")
+    state = {"s3_references": [reference]}
+    operations = []
+
+    def material(*args):
+        operations.append(args)
+        if args[0] == "get-object":
+            assert args[args.index("--version-id") + 1] == "source-version"
+            Path(args[-1]).write_bytes(data)
+            return {}
+        assert args[0] == "put-object"
+        assert args[args.index("--bucket") + 1] == "target-materials"
+        assert Path(args[args.index("--body") + 1]).read_bytes() == data
+        return {"VersionId": "new-target-version"}
+
+    monkeypatch.setattr(recovery, "material_aws", material)
+    records = recovery.backup_materials(tmp_path, settings, state, "backups/snapshot/")
+    assert records[0]["backup"]["version_id"] == "object-version"
+    assert objects[records[0]["backup"]["key"]] == data
+    recovery.restore_materials(tmp_path, root, {}, {**settings, "S3_BUCKET": "target-materials"}, records)
+    mappings = json.loads((tmp_path / "material-mappings.json").read_text())
+    assert mappings == [{"id": reference["id"], "object_version": "new-target-version"}]
+    assert "\\copy material_mapping" in (tmp_path / "material-mappings.sql").read_text()
+    assert not (tmp_path / "material-content").exists()
+
+
+def test_s3_backup_rejects_missing_or_changed_confirmed_content(host, tmp_path, monkeypatch):
+    root, settings, objects, calls = host
+    reference = {"id": "file", "key": "objects/content", "version_id": "fixed", "bytes": 3,
+                 "sha256": "0" * 64, "content_type": "text/plain"}
+    monkeypatch.setattr(recovery, "material_aws", lambda *args: Path(args[-1]).write_bytes(b"bad"))
+    with pytest.raises(ValueError, match="confirmed version"):
+        recovery.backup_materials(tmp_path, {**settings, "S3_BUCKET": "materials"},
+                                  {"s3_references": [reference]}, "backups/snapshot/")
+    assert not objects
+
+
+def test_restore_remaps_s3_version_with_real_psql(pg_url, tmp_path, monkeypatch):
+    """Execute the restore mapping script against a real migrated database."""
+    import hashlib
+    import subprocess
+    from uuid import uuid4
+    import psycopg
+
+    file_id, version_id = uuid4(), uuid4()
+    owner = "00000000-0000-0000-0000-000000000001"
+    with psycopg.connect(pg_url) as connection:
+        connection.execute("INSERT INTO files(id,user_id,logical_path) VALUES (%s,%s,%s)",
+                           (file_id, owner, f"restore-{file_id}.txt"))
+        connection.execute("""INSERT INTO file_versions(id,user_id,file_id,revision,object_key,
+                           storage_backend,object_version,upload_status)
+                           VALUES (%s,%s,%s,1,'objects/restore','s3','source-version','completed')""",
+                           (version_id, owner, file_id))
+    content = b"independent backup copy"
+    record = {"id": str(version_id), "key": "objects/restore", "version_id": "source-version",
+              "bytes": len(content), "sha256": hashlib.sha256(content).hexdigest(),
+              "content_type": "text/plain", "backup": {"key": "backups/copy", "version_id": "backup-version"}}
+    monkeypatch.setattr(recovery, "download", lambda bucket, reference, path: path.write_bytes(content))
+    monkeypatch.setattr(recovery, "material_aws", lambda *args: {"VersionId": "new-target-version"})
+
+    def psql(work, root, config, settings, *args):
+        subprocess.run(["docker", "run", "--rm", "--network", "host", "-v", f"{work}:/backup:ro",
+                        recovery.PG_IMAGE, "psql", pg_url, *args[1:]],
+                       check=True, capture_output=True, text=True, timeout=30)
+    monkeypatch.setattr(recovery, "pg", psql)
+    try:
+        recovery.restore_materials(tmp_path, tmp_path, {}, {"S3_BUCKET": "target", "BACKUP_BUCKET": "backups"}, [record])
+        with psycopg.connect(pg_url) as connection:
+            assert connection.execute("SELECT object_version FROM file_versions WHERE id=%s", (version_id,)).fetchone()[0] == "new-target-version"
+    finally:
+        with psycopg.connect(pg_url) as connection:
+            connection.execute("DELETE FROM files WHERE id=%s", (file_id,))

@@ -1,0 +1,717 @@
+{
+  "environment": "local Chromium + PostgreSQL + Moto; loopback HTTP, no AWS",
+  "baseline_source": "/tmp/classport-b7-baseline",
+  "repeats": 3,
+  "limits": [
+    "API bytes count HTTP bodies, exclude headers/TCP/TLS",
+    "Memory is API RSS sampled every 5 ms; fresh API and one warmup per trial",
+    "Elapsed time includes browser file read, hashing, upload and completion; excludes parsing",
+    "Moto REST checksum-header correction enabled; AWS IAM/signature/CORS acceptance remains separate"
+  ],
+  "results": [
+    {
+      "mode": "local_before",
+      "size_mib": 1,
+      "concurrency": 1,
+      "batch_ms": 112.69999998807907,
+      "file_ms": [
+        112.29999999701977
+      ],
+      "browser_hash_ms": 0,
+      "api_cpu_ms": 60.00000000000011,
+      "api_baseline_rss_bytes": 98570240,
+      "api_peak_rss_bytes": 100675584,
+      "api_peak_rss_increase_bytes": 2105344,
+      "api_request_body_bytes": 1048598,
+      "api_upload_body_bytes": 1048576,
+      "api_response_body_bytes": 664,
+      "repeat": 1
+    },
+    {
+      "mode": "s3_direct",
+      "size_mib": 1,
+      "concurrency": 1,
+      "batch_ms": 141.79999999701977,
+      "file_ms": [
+        141.6000000089407
+      ],
+      "browser_hash_ms": 3.7999999970197678,
+      "api_cpu_ms": 20.000000000000405,
+      "api_baseline_rss_bytes": 123637760,
+      "api_peak_rss_bytes": 123637760,
+      "api_peak_rss_increase_bytes": 0,
+      "api_request_body_bytes": 198,
+      "api_upload_body_bytes": 0,
+      "api_response_body_bytes": 990,
+      "repeat": 1
+    },
+    {
+      "mode": "s3_direct",
+      "size_mib": 1,
+      "concurrency": 1,
+      "batch_ms": 128.79999999701977,
+      "file_ms": [
+        128.59999999403954
+      ],
+      "browser_hash_ms": 4.300000011920929,
+      "api_cpu_ms": 19.99999999999996,
+      "api_baseline_rss_bytes": 123711488,
+      "api_peak_rss_bytes": 123711488,
+      "api_peak_rss_increase_bytes": 0,
+      "api_request_body_bytes": 198,
+      "api_upload_body_bytes": 0,
+      "api_response_body_bytes": 990,
+      "repeat": 2
+    },
+    {
+      "mode": "local_before",
+      "size_mib": 1,
+      "concurrency": 1,
+      "batch_ms": 101.19999998807907,
+      "file_ms": [
+        100.8999999910593
+      ],
+      "browser_hash_ms": 0,
+      "api_cpu_ms": 60.00000000000011,
+      "api_baseline_rss_bytes": 98869248,
+      "api_peak_rss_bytes": 100810752,
+      "api_peak_rss_increase_bytes": 1941504,
+      "api_request_body_bytes": 1048598,
+      "api_upload_body_bytes": 1048576,
+      "api_response_body_bytes": 664,
+      "repeat": 2
+    },
+    {
+      "mode": "local_before",
+      "size_mib": 1,
+      "concurrency": 1,
+      "batch_ms": 92.79999999701977,
+      "file_ms": [
+        92.59999999403954
+      ],
+      "browser_hash_ms": 0,
+      "api_cpu_ms": 50.00000000000004,
+      "api_baseline_rss_bytes": 98721792,
+      "api_peak_rss_bytes": 100745216,
+      "api_peak_rss_increase_bytes": 2023424,
+      "api_request_body_bytes": 1048598,
+      "api_upload_body_bytes": 1048576,
+      "api_response_body_bytes": 664,
+      "repeat": 3
+    },
+    {
+      "mode": "s3_direct",
+      "size_mib": 1,
+      "concurrency": 1,
+      "batch_ms": 126.20000000298023,
+      "file_ms": [
+        126
+      ],
+      "browser_hash_ms": 3.300000011920929,
+      "api_cpu_ms": 20.000000000000185,
+      "api_baseline_rss_bytes": 123392000,
+      "api_peak_rss_bytes": 123392000,
+      "api_peak_rss_increase_bytes": 0,
+      "api_request_body_bytes": 198,
+      "api_upload_body_bytes": 0,
+      "api_response_body_bytes": 990,
+      "repeat": 3
+    },
+    {
+      "mode": "local_before",
+      "size_mib": 1,
+      "concurrency": 4,
+      "batch_ms": 279.6000000089407,
+      "file_ms": [
+        219,
+        190.1000000089407,
+        257.70000000298023,
+        262.6000000089407
+      ],
+      "browser_hash_ms": 0,
+      "api_cpu_ms": 210.00000000000003,
+      "api_baseline_rss_bytes": 98783232,
+      "api_peak_rss_bytes": 104681472,
+      "api_peak_rss_increase_bytes": 5898240,
+      "api_request_body_bytes": 4194392,
+      "api_upload_body_bytes": 4194304,
+      "api_response_body_bytes": 2656,
+      "repeat": 1
+    },
+    {
+      "mode": "s3_direct",
+      "size_mib": 1,
+      "concurrency": 4,
+      "batch_ms": 319.70000000298023,
+      "file_ms": [
+        273.19999998807907,
+        283.80000001192093,
+        265.70000000298023,
+        296.90000000596046
+      ],
+      "browser_hash_ms": 13.000000014901161,
+      "api_cpu_ms": 110.00000000000021,
+      "api_baseline_rss_bytes": 123609088,
+      "api_peak_rss_bytes": 123609088,
+      "api_peak_rss_increase_bytes": 0,
+      "api_request_body_bytes": 792,
+      "api_upload_body_bytes": 0,
+      "api_response_body_bytes": 3960,
+      "repeat": 1
+    },
+    {
+      "mode": "s3_direct",
+      "size_mib": 1,
+      "concurrency": 4,
+      "batch_ms": 298.5,
+      "file_ms": [
+        264.3999999910593,
+        274.40000000596046,
+        249.69999998807907,
+        280.19999998807907
+      ],
+      "browser_hash_ms": 14.599999994039536,
+      "api_cpu_ms": 109.99999999999982,
+      "api_baseline_rss_bytes": 123777024,
+      "api_peak_rss_bytes": 123908096,
+      "api_peak_rss_increase_bytes": 131072,
+      "api_request_body_bytes": 792,
+      "api_upload_body_bytes": 0,
+      "api_response_body_bytes": 3960,
+      "repeat": 2
+    },
+    {
+      "mode": "local_before",
+      "size_mib": 1,
+      "concurrency": 4,
+      "batch_ms": 288.3999999910593,
+      "file_ms": [
+        256,
+        197.70000000298023,
+        259,
+        271.59999999403954
+      ],
+      "browser_hash_ms": 0,
+      "api_cpu_ms": 219.99999999999997,
+      "api_baseline_rss_bytes": 98770944,
+      "api_peak_rss_bytes": 104243200,
+      "api_peak_rss_increase_bytes": 5472256,
+      "api_request_body_bytes": 4194392,
+      "api_upload_body_bytes": 4194304,
+      "api_response_body_bytes": 2656,
+      "repeat": 2
+    },
+    {
+      "mode": "local_before",
+      "size_mib": 1,
+      "concurrency": 4,
+      "batch_ms": 296.5,
+      "file_ms": [
+        204.29999999701977,
+        247.79999999701977,
+        285.69999998807907,
+        261.8999999910593
+      ],
+      "browser_hash_ms": 0,
+      "api_cpu_ms": 229.99999999999983,
+      "api_baseline_rss_bytes": 98598912,
+      "api_peak_rss_bytes": 103841792,
+      "api_peak_rss_increase_bytes": 5242880,
+      "api_request_body_bytes": 4194392,
+      "api_upload_body_bytes": 4194304,
+      "api_response_body_bytes": 2656,
+      "repeat": 3
+    },
+    {
+      "mode": "s3_direct",
+      "size_mib": 1,
+      "concurrency": 4,
+      "batch_ms": 358.1000000089407,
+      "file_ms": [
+        248.59999999403954,
+        288.30000001192093,
+        340.6000000089407,
+        301.5
+      ],
+      "browser_hash_ms": 14.500000014901161,
+      "api_cpu_ms": 130.00000000000028,
+      "api_baseline_rss_bytes": 123584512,
+      "api_peak_rss_bytes": 123715584,
+      "api_peak_rss_increase_bytes": 131072,
+      "api_request_body_bytes": 792,
+      "api_upload_body_bytes": 0,
+      "api_response_body_bytes": 3960,
+      "repeat": 3
+    },
+    {
+      "mode": "local_before",
+      "size_mib": 16,
+      "concurrency": 1,
+      "batch_ms": 981.5,
+      "file_ms": [
+        981.1000000089407
+      ],
+      "browser_hash_ms": 0,
+      "api_cpu_ms": 639.9999999999997,
+      "api_baseline_rss_bytes": 98750464,
+      "api_peak_rss_bytes": 131649536,
+      "api_peak_rss_increase_bytes": 32899072,
+      "api_request_body_bytes": 16777238,
+      "api_upload_body_bytes": 16777216,
+      "api_response_body_bytes": 666,
+      "repeat": 1
+    },
+    {
+      "mode": "s3_direct",
+      "size_mib": 16,
+      "concurrency": 1,
+      "batch_ms": 958.1999999880791,
+      "file_ms": [
+        958
+      ],
+      "browser_hash_ms": 61.900000005960464,
+      "api_cpu_ms": 29.999999999999805,
+      "api_baseline_rss_bytes": 123768832,
+      "api_peak_rss_bytes": 123768832,
+      "api_peak_rss_increase_bytes": 0,
+      "api_request_body_bytes": 199,
+      "api_upload_body_bytes": 0,
+      "api_response_body_bytes": 991,
+      "repeat": 1
+    },
+    {
+      "mode": "s3_direct",
+      "size_mib": 16,
+      "concurrency": 1,
+      "batch_ms": 1074,
+      "file_ms": [
+        1073.7000000029802
+      ],
+      "browser_hash_ms": 65.70000000298023,
+      "api_cpu_ms": 29.999999999999805,
+      "api_baseline_rss_bytes": 123543552,
+      "api_peak_rss_bytes": 123543552,
+      "api_peak_rss_increase_bytes": 0,
+      "api_request_body_bytes": 199,
+      "api_upload_body_bytes": 0,
+      "api_response_body_bytes": 991,
+      "repeat": 2
+    },
+    {
+      "mode": "local_before",
+      "size_mib": 16,
+      "concurrency": 1,
+      "batch_ms": 870.3999999910593,
+      "file_ms": [
+        870.0999999940395
+      ],
+      "browser_hash_ms": 0,
+      "api_cpu_ms": 490.0000000000001,
+      "api_baseline_rss_bytes": 98828288,
+      "api_peak_rss_bytes": 131727360,
+      "api_peak_rss_increase_bytes": 32899072,
+      "api_request_body_bytes": 16777238,
+      "api_upload_body_bytes": 16777216,
+      "api_response_body_bytes": 666,
+      "repeat": 2
+    },
+    {
+      "mode": "local_before",
+      "size_mib": 16,
+      "concurrency": 1,
+      "batch_ms": 1105.4000000059605,
+      "file_ms": [
+        1105
+      ],
+      "browser_hash_ms": 0,
+      "api_cpu_ms": 550.0,
+      "api_baseline_rss_bytes": 98516992,
+      "api_peak_rss_bytes": 131416064,
+      "api_peak_rss_increase_bytes": 32899072,
+      "api_request_body_bytes": 16777238,
+      "api_upload_body_bytes": 16777216,
+      "api_response_body_bytes": 666,
+      "repeat": 3
+    },
+    {
+      "mode": "s3_direct",
+      "size_mib": 16,
+      "concurrency": 1,
+      "batch_ms": 1293.2000000029802,
+      "file_ms": [
+        1292.7999999970198
+      ],
+      "browser_hash_ms": 82.8999999910593,
+      "api_cpu_ms": 19.999999999999684,
+      "api_baseline_rss_bytes": 123412480,
+      "api_peak_rss_bytes": 123543552,
+      "api_peak_rss_increase_bytes": 131072,
+      "api_request_body_bytes": 199,
+      "api_upload_body_bytes": 0,
+      "api_response_body_bytes": 991,
+      "repeat": 3
+    },
+    {
+      "mode": "local_before",
+      "size_mib": 16,
+      "concurrency": 4,
+      "batch_ms": 2099.7000000029802,
+      "file_ms": [
+        1755.4000000059605,
+        1970.8999999910593,
+        1967.7999999970198,
+        1337.7000000029802
+      ],
+      "browser_hash_ms": 0,
+      "api_cpu_ms": 1779.9999999999993,
+      "api_baseline_rss_bytes": 98734080,
+      "api_peak_rss_bytes": 217366528,
+      "api_peak_rss_increase_bytes": 118632448,
+      "api_request_body_bytes": 67108952,
+      "api_upload_body_bytes": 67108864,
+      "api_response_body_bytes": 2664,
+      "repeat": 1
+    },
+    {
+      "mode": "s3_direct",
+      "size_mib": 16,
+      "concurrency": 4,
+      "batch_ms": 2754.6000000089407,
+      "file_ms": [
+        2325.0999999940395,
+        2242.7000000029802,
+        2656.5,
+        2116.5
+      ],
+      "browser_hash_ms": 272.1000000089407,
+      "api_cpu_ms": 140.00000000000006,
+      "api_baseline_rss_bytes": 123518976,
+      "api_peak_rss_bytes": 123781120,
+      "api_peak_rss_increase_bytes": 262144,
+      "api_request_body_bytes": 796,
+      "api_upload_body_bytes": 0,
+      "api_response_body_bytes": 3964,
+      "repeat": 1
+    },
+    {
+      "mode": "s3_direct",
+      "size_mib": 16,
+      "concurrency": 4,
+      "batch_ms": 3083,
+      "file_ms": [
+        2665.2999999970198,
+        1989.0999999940395,
+        1918.9000000059605,
+        2838.7000000029802
+      ],
+      "browser_hash_ms": 247.19999998807907,
+      "api_cpu_ms": 140.00000000000006,
+      "api_baseline_rss_bytes": 123748352,
+      "api_peak_rss_bytes": 123879424,
+      "api_peak_rss_increase_bytes": 131072,
+      "api_request_body_bytes": 796,
+      "api_upload_body_bytes": 0,
+      "api_response_body_bytes": 3964,
+      "repeat": 2
+    },
+    {
+      "mode": "local_before",
+      "size_mib": 16,
+      "concurrency": 4,
+      "batch_ms": 1902.2000000029802,
+      "file_ms": [
+        1726.8999999910593,
+        1768.9000000059605,
+        1752.1000000089407,
+        1724.2000000029802
+      ],
+      "browser_hash_ms": 0,
+      "api_cpu_ms": 1530.0,
+      "api_baseline_rss_bytes": 98922496,
+      "api_peak_rss_bytes": 170151936,
+      "api_peak_rss_increase_bytes": 71229440,
+      "api_request_body_bytes": 67108952,
+      "api_upload_body_bytes": 67108864,
+      "api_response_body_bytes": 2664,
+      "repeat": 2
+    },
+    {
+      "mode": "local_before",
+      "size_mib": 16,
+      "concurrency": 4,
+      "batch_ms": 1968.1000000089407,
+      "file_ms": [
+        1967.7000000029802,
+        1896.4000000059605,
+        1271.5,
+        1311.2000000029802
+      ],
+      "browser_hash_ms": 0,
+      "api_cpu_ms": 1810.0,
+      "api_baseline_rss_bytes": 99033088,
+      "api_peak_rss_bytes": 219156480,
+      "api_peak_rss_increase_bytes": 120123392,
+      "api_request_body_bytes": 67108952,
+      "api_upload_body_bytes": 67108864,
+      "api_response_body_bytes": 2664,
+      "repeat": 3
+    },
+    {
+      "mode": "s3_direct",
+      "size_mib": 16,
+      "concurrency": 4,
+      "batch_ms": 2768.3999999910593,
+      "file_ms": [
+        2768,
+        2343.8999999910593,
+        2611.7999999970198,
+        2161.9000000059605
+      ],
+      "browser_hash_ms": 248.80000001192093,
+      "api_cpu_ms": 100.00000000000031,
+      "api_baseline_rss_bytes": 123731968,
+      "api_peak_rss_bytes": 123863040,
+      "api_peak_rss_increase_bytes": 131072,
+      "api_request_body_bytes": 796,
+      "api_upload_body_bytes": 0,
+      "api_response_body_bytes": 3964,
+      "repeat": 3
+    },
+    {
+      "mode": "local_before",
+      "size_mib": 64,
+      "concurrency": 1,
+      "batch_ms": 4803.5999999940395,
+      "file_ms": [
+        4802.899999991059
+      ],
+      "browser_hash_ms": 0,
+      "api_cpu_ms": 3199.999999999999,
+      "api_baseline_rss_bytes": 98680832,
+      "api_peak_rss_bytes": 234602496,
+      "api_peak_rss_increase_bytes": 135921664,
+      "api_request_body_bytes": 67108886,
+      "api_upload_body_bytes": 67108864,
+      "api_response_body_bytes": 666,
+      "repeat": 1
+    },
+    {
+      "mode": "s3_direct",
+      "size_mib": 64,
+      "concurrency": 1,
+      "batch_ms": 4852.5999999940395,
+      "file_ms": [
+        4852.29999999702
+      ],
+      "browser_hash_ms": 336.5,
+      "api_cpu_ms": 29.99999999999997,
+      "api_baseline_rss_bytes": 123473920,
+      "api_peak_rss_bytes": 123604992,
+      "api_peak_rss_increase_bytes": 131072,
+      "api_request_body_bytes": 199,
+      "api_upload_body_bytes": 0,
+      "api_response_body_bytes": 991,
+      "repeat": 1
+    },
+    {
+      "mode": "s3_direct",
+      "size_mib": 64,
+      "concurrency": 1,
+      "batch_ms": 5664,
+      "file_ms": [
+        5663.399999991059
+      ],
+      "browser_hash_ms": 310.70000000298023,
+      "api_cpu_ms": 40.00000000000015,
+      "api_baseline_rss_bytes": 123813888,
+      "api_peak_rss_bytes": 123813888,
+      "api_peak_rss_increase_bytes": 0,
+      "api_request_body_bytes": 199,
+      "api_upload_body_bytes": 0,
+      "api_response_body_bytes": 991,
+      "repeat": 2
+    },
+    {
+      "mode": "local_before",
+      "size_mib": 64,
+      "concurrency": 1,
+      "batch_ms": 2951.2999999970198,
+      "file_ms": [
+        2950.7999999970198
+      ],
+      "browser_hash_ms": 0,
+      "api_cpu_ms": 2030.0000000000002,
+      "api_baseline_rss_bytes": 98598912,
+      "api_peak_rss_bytes": 234127360,
+      "api_peak_rss_increase_bytes": 135528448,
+      "api_request_body_bytes": 67108886,
+      "api_upload_body_bytes": 67108864,
+      "api_response_body_bytes": 666,
+      "repeat": 2
+    },
+    {
+      "mode": "local_before",
+      "size_mib": 64,
+      "concurrency": 1,
+      "batch_ms": 3385.2999999970198,
+      "file_ms": [
+        3384.5999999940395
+      ],
+      "browser_hash_ms": 0,
+      "api_cpu_ms": 2130.0,
+      "api_baseline_rss_bytes": 98418688,
+      "api_peak_rss_bytes": 234602496,
+      "api_peak_rss_increase_bytes": 136183808,
+      "api_request_body_bytes": 67108886,
+      "api_upload_body_bytes": 67108864,
+      "api_response_body_bytes": 666,
+      "repeat": 3
+    },
+    {
+      "mode": "s3_direct",
+      "size_mib": 64,
+      "concurrency": 1,
+      "batch_ms": 5702.5,
+      "file_ms": [
+        5701.899999991059
+      ],
+      "browser_hash_ms": 297.90000000596046,
+      "api_cpu_ms": 39.99999999999992,
+      "api_baseline_rss_bytes": 123604992,
+      "api_peak_rss_bytes": 123736064,
+      "api_peak_rss_increase_bytes": 131072,
+      "api_request_body_bytes": 199,
+      "api_upload_body_bytes": 0,
+      "api_response_body_bytes": 991,
+      "repeat": 3
+    },
+    {
+      "mode": "local_before",
+      "size_mib": 64,
+      "concurrency": 4,
+      "batch_ms": 16153.90000000596,
+      "file_ms": [
+        14932.300000011921,
+        15032.79999999702,
+        15460,
+        15449.800000011921
+      ],
+      "browser_hash_ms": 0,
+      "api_cpu_ms": 15220.0,
+      "api_baseline_rss_bytes": 98713600,
+      "api_peak_rss_bytes": 542535680,
+      "api_peak_rss_increase_bytes": 443822080,
+      "api_request_body_bytes": 268435544,
+      "api_upload_body_bytes": 268435456,
+      "api_response_body_bytes": 2664,
+      "repeat": 1
+    },
+    {
+      "mode": "s3_direct",
+      "size_mib": 64,
+      "concurrency": 4,
+      "batch_ms": 11510.79999999702,
+      "file_ms": [
+        8831.79999999702,
+        11380.199999988079,
+        9925.59999999404,
+        8733.90000000596
+      ],
+      "browser_hash_ms": 1194.2999999970198,
+      "api_cpu_ms": 159.99999999999943,
+      "api_baseline_rss_bytes": 123822080,
+      "api_peak_rss_bytes": 124084224,
+      "api_peak_rss_increase_bytes": 262144,
+      "api_request_body_bytes": 796,
+      "api_upload_body_bytes": 0,
+      "api_response_body_bytes": 3964,
+      "repeat": 1
+    },
+    {
+      "mode": "s3_direct",
+      "size_mib": 64,
+      "concurrency": 4,
+      "batch_ms": 10407.800000011921,
+      "file_ms": [
+        6761,
+        6999.29999999702,
+        9779.40000000596,
+        9930.40000000596
+      ],
+      "browser_hash_ms": 1176.2999999970198,
+      "api_cpu_ms": 150.00000000000009,
+      "api_baseline_rss_bytes": 123453440,
+      "api_peak_rss_bytes": 123584512,
+      "api_peak_rss_increase_bytes": 131072,
+      "api_request_body_bytes": 796,
+      "api_upload_body_bytes": 0,
+      "api_response_body_bytes": 3964,
+      "repeat": 2
+    },
+    {
+      "mode": "local_before",
+      "size_mib": 64,
+      "concurrency": 4,
+      "batch_ms": 6224.9000000059605,
+      "file_ms": [
+        6032.100000008941,
+        5161.70000000298,
+        5506.70000000298,
+        5772.4000000059605
+      ],
+      "browser_hash_ms": 0,
+      "api_cpu_ms": 5580.0,
+      "api_baseline_rss_bytes": 98496512,
+      "api_peak_rss_bytes": 547549184,
+      "api_peak_rss_increase_bytes": 449052672,
+      "api_request_body_bytes": 268435544,
+      "api_upload_body_bytes": 268435456,
+      "api_response_body_bytes": 2664,
+      "repeat": 2
+    },
+    {
+      "mode": "local_before",
+      "size_mib": 64,
+      "concurrency": 4,
+      "batch_ms": 9005.300000011921,
+      "file_ms": [
+        8590.79999999702,
+        7924.5999999940395,
+        8682.10000000894,
+        8334.5
+      ],
+      "browser_hash_ms": 0,
+      "api_cpu_ms": 7750.0,
+      "api_baseline_rss_bytes": 98684928,
+      "api_peak_rss_bytes": 537415680,
+      "api_peak_rss_increase_bytes": 438730752,
+      "api_request_body_bytes": 268435544,
+      "api_upload_body_bytes": 268435456,
+      "api_response_body_bytes": 2664,
+      "repeat": 3
+    },
+    {
+      "mode": "s3_direct",
+      "size_mib": 64,
+      "concurrency": 4,
+      "batch_ms": 10719.59999999404,
+      "file_ms": [
+        9931.79999999702,
+        6166.70000000298,
+        6307.70000000298,
+        10288
+      ],
+      "browser_hash_ms": 935.2000000029802,
+      "api_cpu_ms": 140.00000000000057,
+      "api_baseline_rss_bytes": 123789312,
+      "api_peak_rss_bytes": 123789312,
+      "api_peak_rss_increase_bytes": 0,
+      "api_request_body_bytes": 796,
+      "api_upload_body_bytes": 0,
+      "api_response_body_bytes": 3964,
+      "repeat": 3
+    }
+  ],
+  "browser_version": "147.0.7727.15",
+  "python_version": "3.13.12"
+}

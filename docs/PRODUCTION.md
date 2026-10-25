@@ -12,6 +12,10 @@ from the versioned application secret. Normal releases include background
 processing in switching and rollback. See
 [WORKERS.md](WORKERS.md) for configuration and task recovery.
 
+AWS material bytes use a separate private versioned S3 bucket. API/worker have
+no material mount; the host rotates a restricted STS grant through an isolated
+read-only directory. See [S3_STORAGE.md](S3_STORAGE.md) for setup and cutover.
+
 ## Configure the release environment
 
 Create the GitHub `production` environment. Restrict its deployment branches/tags

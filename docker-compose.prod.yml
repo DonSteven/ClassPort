@@ -11,12 +11,11 @@ services:
         format: raw
       - path: .env.jobs
         format: raw
-    environment:
-      STUDY_ROOT: /opt/courses
     volumes:
       - type: bind
-        source: ./data/courses
-        target: /opt/courses
+        source: /run/classport-storage
+        target: /run/classport-storage
+        read_only: true
         bind:
           create_host_path: false
       - type: bind
@@ -60,14 +59,13 @@ services:
       - path: .env.jobs
         format: raw
     environment:
-      STUDY_ROOT: /opt/courses
       CELERY_BROKER_URL: redis://redis:6379/0
       DB_POOL_MIN_SIZE: "1"
       DB_POOL_MAX_SIZE: "2"
     volumes:
       - type: bind
-        source: ./data/courses
-        target: /opt/courses
+        source: /run/classport-storage
+        target: /run/classport-storage
         read_only: true
         bind:
           create_host_path: false

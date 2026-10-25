@@ -1,7 +1,10 @@
 """User-owned logical files and immutable versions, independent of storage paths."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import os
+import re
 import logging
 import mimetypes
 from typing import Any
@@ -151,8 +154,20 @@ async def list_recursive(user_id: UUID, prefix: str) -> list[str]:
             if not any(p.startswith(".") for p in r["logical_path"].split("/"))]
 
 
-async def begin_upload(user_id: UUID, path: str) -> dict:
+async def begin_upload(user_id: UUID, path: str, *, size: int | None = None,
+                       sha256: str | None = None, content_type: str | None = None) -> dict:
     path = clean_path(path)
+    backend = os.environ.get("STORAGE_BACKEND", "local")
+    if size is not None and (isinstance(size, bool) or not isinstance(size, int) or not 0 <= size <= 5 * 1024**3):
+        raise InvalidFilePath("invalid upload size")
+    if sha256 is not None and (not isinstance(sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", sha256)):
+        raise InvalidFilePath("invalid SHA-256 checksum")
+    if backend == "s3" and (size is None or sha256 is None):
+        raise InvalidFilePath("S3 uploads require size and SHA-256 checksum")
+    mime = content_type or mimetypes.guess_type(path)[0] or "application/octet-stream"
+    if not isinstance(mime, str) or len(mime) > 255 or any(c in mime for c in "\r\n\0"):
+        raise InvalidFilePath("invalid content type")
+    store = get_storage(backend)
     async with db.db() as conn, conn.transaction():
         await _lock_tree(conn, user_id)
         await _parents(conn, user_id, path)
@@ -160,14 +175,16 @@ async def begin_upload(user_id: UUID, path: str) -> dict:
         version_id = str(uuid4())
         key = f"objects/{user_id}/{file['id']}/{version_id}/content"
         version = await (await conn.execute(
-            """INSERT INTO file_versions(id, user_id, file_id, revision, object_key)
-               SELECT %s, %s, %s, coalesce(max(revision), 0) + 1, %s
+            """INSERT INTO file_versions(id, user_id, file_id, revision, object_key,
+                      storage_backend, size, sha256, content_type)
+               SELECT %s, %s, %s, coalesce(max(revision), 0) + 1, %s, %s, %s, %s, %s
                FROM file_versions WHERE user_id = %s AND file_id = %s RETURNING *""",
-            (version_id, user_id, file["id"], key, user_id, file["id"]),
+            (version_id, user_id, file["id"], key, backend, size, sha256, mime, user_id, file["id"]),
         )).fetchone()
+    target = await asyncio.to_thread(store.upload_url, ObjectRef(key), file_id=file["id"],
+                                     version_id=version["id"], content_type=mime, sha256=sha256)
     return {"path": path, "file_id": file["id"], "version_id": version["id"],
-            "url": get_storage().upload_url(ObjectRef(key), file_id=file["id"],
-                                             version_id=version["id"]), "headers": {}}
+            "storage_backend": backend, **target}
 
 
 async def accept_upload(user_id: UUID, file_id: UUID, version_id: UUID,
@@ -190,26 +207,61 @@ async def accept_upload(user_id: UUID, file_id: UUID, version_id: UUID,
         mime = mime or "application/octet-stream"
         store = get_storage(row["storage_backend"])
         ref = ObjectRef(row["object_key"], row["object_version"])
+        digest = hashlib.sha256(data).hexdigest()
+        if row["storage_backend"] == "s3" and (row["size"] != len(data) or row["sha256"] != digest):
+            raise StorageConflict("content differs from the requested upload")
         # Immutable publication also permits finishing an interrupted PUT if its
         # bytes were published before the database transaction committed.
         try:
-            await store.write(ref, data)
+            ref = await store.write(ref, data, content_type=mime)
         except StorageConflict:
             if await store.read(ref) != data:
                 raise StorageConflict("file version already contains different content") from None
-        if await store.stat(ref) != len(data):
+        if (await store.stat(ref)).size != len(data):
             raise StorageConflict("stored content size differs from upload")
         await conn.execute(
-            """UPDATE file_versions SET size = %s, sha256 = %s, content_type = %s
+            """UPDATE file_versions SET size = %s, sha256 = %s, content_type = %s, object_version = %s
                WHERE user_id = %s AND file_id = %s AND id = %s""",
-            (len(data), hashlib.sha256(data).hexdigest(), mime, user_id, file_id, version_id),
+            (len(data), digest, mime, ref.version, user_id, file_id, version_id),
         )
     return {"path": row["logical_path"], "file_id": str(file_id),
             "version_id": str(version_id), "size": len(data), "content_type": mime}
 
 
-async def complete_upload(user_id: UUID, file_id: UUID, version_id: UUID) -> dict:
-    """Publish the completed revision, job and outbox in one transaction."""
+async def complete_upload(user_id: UUID, file_id: UUID, version_id: UUID,
+                          object_version: str | None = None) -> dict:
+    """Verify immutable content without a DB checkout, then publish atomically."""
+    source = await db.fetchrow(
+        """SELECT v.*, f.logical_path FROM file_versions v JOIN files f
+             ON f.user_id = v.user_id AND f.id = v.file_id
+           WHERE v.user_id = %s AND v.file_id = %s AND v.id = %s
+             AND f.deleted_at IS NULL""", user_id, file_id, version_id,
+    )
+    if source is None:
+        raise StorageNotFound("file version not found")
+    candidate = source["object_version"] or object_version
+    if object_version and source["object_version"] and object_version != source["object_version"]:
+        raise StorageConflict("file version is already bound to different content")
+    if source["upload_status"] == "abandoned":
+        raise StorageConflict("upload was abandoned")
+    if source["upload_status"] == "pending":
+        if source["size"] is None or source["sha256"] is None:
+            raise StorageConflict("upload bytes have not been received")
+        store = get_storage(source["storage_backend"])
+        ref = ObjectRef(source["object_key"], candidate)
+        try:
+            info = await store.stat(ref)
+            if source["storage_backend"] == "local":
+                data = await store.read(ref)
+                digest = hashlib.sha256(data).hexdigest()
+            else:
+                digest = info.sha256
+                if info.content_type != source["content_type"]:
+                    raise StorageConflict("stored content type differs from upload")
+            if info.size != source["size"] or digest != source["sha256"]:
+                raise StorageConflict("stored content differs from the requested upload")
+        except StorageNotFound:
+            raise StorageConflict("upload bytes have not been received") from None
     async with db.db() as conn, conn.transaction():
         await _lock_tree(conn, user_id)
         row = await (await conn.execute(
@@ -223,18 +275,16 @@ async def complete_upload(user_id: UUID, file_id: UUID, version_id: UUID) -> dic
             raise StorageNotFound("file version not found")
         if row["upload_status"] == "abandoned":
             raise StorageConflict("upload was abandoned")
+        if row["object_version"] and candidate != row["object_version"]:
+            raise StorageConflict("file version is already bound to different content")
         if row["upload_status"] == "pending":
-            if row["size"] is None or row["sha256"] is None:
-                raise StorageConflict("upload bytes have not been received")
-            store = get_storage(row["storage_backend"])
-            ref = ObjectRef(row["object_key"], row["object_version"])
-            data = await store.read(ref)
-            if (await store.stat(ref) != row["size"] or len(data) != row["size"]
-                    or hashlib.sha256(data).hexdigest() != row["sha256"]):
-                raise StorageConflict("stored content differs from the received upload")
+            if (row["size"], row["sha256"]) != (source["size"], source["sha256"]):
+                raise StorageConflict("upload changed during confirmation")
             await conn.execute(
-                """UPDATE file_versions SET upload_status = 'completed', completed_at = now()
-                   WHERE user_id = %s AND file_id = %s AND id = %s""", (user_id, file_id, version_id),
+                """UPDATE file_versions SET upload_status = 'completed', completed_at = now(),
+                       object_version = %s
+                   WHERE user_id = %s AND file_id = %s AND id = %s""",
+                (candidate, user_id, file_id, version_id),
             )
         # An earlier upload finishing late cannot replace a newer revision.
         await conn.execute(
@@ -264,7 +314,8 @@ async def complete_upload(user_id: UUID, file_id: UUID, version_id: UUID) -> dic
 
 
 async def upload(user_id: UUID, path: str, data: bytes, content_type: str | None = None) -> dict:
-    target = await begin_upload(user_id, path)
+    target = await begin_upload(user_id, path, size=len(data),
+                                sha256=hashlib.sha256(data).hexdigest(), content_type=content_type)
     await accept_upload(user_id, target["file_id"], target["version_id"], data, content_type)
     return await complete_upload(user_id, target["file_id"], target["version_id"])
 
@@ -323,11 +374,13 @@ async def exists(user_id: UUID, path: str) -> bool:
     return await stat(user_id, path) is not None
 
 
-async def signed_url(user_id: UUID, path: str, expires_in: int = 3600) -> str:
+async def signed_url(user_id: UUID, path: str, expires_in: int = 3600) -> dict:
     row = await current_version(user_id, path)
-    return get_storage(row["storage_backend"]).download_url(
+    return await asyncio.to_thread(
+        get_storage(row["storage_backend"]).download_url,
         ObjectRef(row["object_key"], row["object_version"]), file_id=row["file_id"],
         version_id=row["id"], expires_in=expires_in,
+        filename=row["logical_path"].rsplit("/", 1)[-1], content_type=row["content_type"],
     )
 
 

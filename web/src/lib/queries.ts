@@ -1,3 +1,5 @@
+import { uploadFile, type FileUploadTarget } from "./file-upload";
+export type { FileUploadTarget } from "./file-upload";
 import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { api } from "./api";
 import type {
@@ -622,10 +624,9 @@ export function useFileSignedUrl(path: string | null) {
     queryFn: () =>
       api.get<{ url: string; expires_in: number }>("/api/files/signed-url", { path: path! }),
     enabled: Boolean(path),
-    // Signed URLs are valid 1 h; keep cached for 50 min so we re-mint before
-    // expiry. Browser cache on the actual PDF response keeps egress low.
-    staleTime: 50 * 60_000,
-    gcTime: 60 * 60_000,
+    staleTime: (query) => Math.max(0, ((query.state.data?.expires_in ?? 60) - 30) * 1000),
+    refetchInterval: (query) => Math.max(1000, ((query.state.data?.expires_in ?? 60) - 30) * 1000),
+    gcTime: 5 * 60_000,
   });
 }
 
@@ -670,7 +671,6 @@ export function useSyncMaterials() {
   });
 }
 
-export type FileUploadTarget = { file_id: string; version_id: string };
 export type FileUploadResult = FileUploadTarget & {
   path: string;
   job_id: string;
@@ -679,34 +679,16 @@ export type FileUploadResult = FileUploadTarget & {
 
 export function useUploadFile() {
   return useMutation({
-    mutationFn: async ({ file, path }: { file: File; path: string }) => {
-      const { url, headers, file_id, version_id } = await api.post<{
-        url: string; headers: Record<string, string>; file_id: string; version_id: string;
-      }>(
-        "/api/files/upload-url",
-        { path }
-      );
-      const res = await fetch(url, {
-        method: "PUT",
-        headers: {
-          "Content-Type": file.type || "application/octet-stream",
-          ...headers,
-        },
-        body: file,
-      });
-      if (!res.ok) {
-        throw new Error(`upload failed: ${res.status} ${res.statusText}`);
-      }
-      return { file_id, version_id };
-    },
+    mutationFn: ({ file, path }: { file: File; path: string }) => uploadFile(file, path),
   });
 }
 
 export function useCompleteFileUpload() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ file_id, version_id }: FileUploadTarget) => api.post<FileUploadResult>(
+    mutationFn: ({ file_id, version_id, object_version }: FileUploadTarget) => api.post<FileUploadResult>(
       `/api/files/${file_id}/versions/${version_id}/complete`,
+      { object_version },
     ),
     onSettled: () => {
       // A lost response may still mean that completion committed on the server.

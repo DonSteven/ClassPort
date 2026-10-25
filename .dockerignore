@@ -33,6 +33,7 @@ release.env
 .env
 .env.*
 !.env.example
+infra/aws/application-secret.json
 
 # Other build artefacts
 dist/

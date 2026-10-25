@@ -29,16 +29,17 @@ async def check_restore(base, config, token, pdf_path, study_root=Path("/opt/cou
         from app import db
         from app.services.file_records import current_version
         from app.storage.base import ObjectRef
-        from app.storage.local import LocalStorage
+        from app.storage import get_storage
         await db.init_pool()
         try:
             version = await current_version("00000000-0000-0000-0000-000000000001", pdf_path)
-            if not pdf_path.lower().endswith(".pdf") or version["storage_backend"] != "local":
-                raise ValueError("Choose a restored local operator PDF for the exercise")
-            expected = await LocalStorage(study_root).read(ObjectRef(version["object_key"]))
+            if not pdf_path.lower().endswith(".pdf"):
+                raise ValueError("Choose a restored operator PDF for the exercise")
+            expected = await get_storage(version["storage_backend"]).read(
+                ObjectRef(version["object_key"], version["object_version"]))
         finally:
             await db.close_pool()
-        response = await client.get("/api/files/raw", params={"path": pdf_path})
+        response = await client.get("/api/files/raw", params={"path": pdf_path}, follow_redirects=True)
         response.raise_for_status()
         if response.content != expected or response.headers.get("content-type") != "application/pdf":
             raise ValueError("Downloaded PDF differs from the recovered file")

@@ -42,12 +42,12 @@ async def delete(user_id: UUID, paths: list[str]) -> dict[str, Any]:
     return await svc.delete(user_id, paths)
 
 
-async def signed_url(user_id: UUID, path: str, expires_in: int = 3600) -> str:
+async def signed_url(user_id: UUID, path: str, expires_in: int = 3600) -> dict:
     return await svc.signed_url(user_id, path, expires_in)
 
 
-async def signed_upload_url(user_id: UUID, path: str) -> dict[str, Any]:
-    return await svc.begin_upload(user_id, path)
+async def signed_upload_url(user_id: UUID, path: str, **metadata) -> dict[str, Any]:
+    return await svc.begin_upload(user_id, path, **metadata)
 
 
 async def move(user_id: UUID, source: str, destination: str) -> dict[str, Any]:
@@ -75,8 +75,9 @@ async def accept_upload(user_id: UUID, file_id: UUID, version_id: UUID,
     return await svc.accept_upload(user_id, file_id, version_id, data, content_type)
 
 
-async def complete_upload(user_id: UUID, file_id: UUID, version_id: UUID) -> dict:
-    return await svc.complete_upload(user_id, file_id, version_id)
+async def complete_upload(user_id: UUID, file_id: UUID, version_id: UUID,
+                          object_version: str | None = None) -> dict:
+    return await svc.complete_upload(user_id, file_id, version_id, object_version)
 
 
 async def current_version(user_id: UUID, path: str) -> dict:

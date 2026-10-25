@@ -1,4 +1,4 @@
-aws_region  = "us-east-1"
+aws_region  = "us-east-2"
 name        = "classport-prod"
 # Both are optional. Leave domain_name unset until you own the domain and are
 # ready to configure its Cloudflare A record. No certificate is requested while

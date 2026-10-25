@@ -23,6 +23,7 @@ dependencies = [
   "cryptography>=42",
   "jinja2>=3.1",
   "celery[redis]>=5.5,<6",
+  "boto3>=1.40,<2",
 ]
 
 [tool.uv]
@@ -40,6 +41,9 @@ dev = [
   "testcontainers[postgres]>=4.8",
   "dirty-equals>=0.8",
   "psycopg[binary,pool]>=3.2",
+  "moto[s3,server]>=5.1,<6",
+  "psutil>=6",
+  "playwright>=1.50,<2",
 ]
 scripts = [
   "watchdog>=5",

@@ -28,7 +28,7 @@ COPY app ./app
 COPY scripts ./scripts
 COPY migrations ./migrations
 COPY docker-compose.prod.yml deploy-prod.sh ./release/
-COPY infra/aws/scripts/bootstrap.py infra/aws/scripts/recovery.py ./release/
+COPY infra/aws/scripts/bootstrap.py infra/aws/scripts/recovery.py infra/aws/scripts/storage_credentials.py ./release/
 
 # Final install (in case pyproject changed locally).
 RUN uv sync --frozen --no-dev

@@ -51,9 +51,13 @@ def test_production_uses_only_pinned_images_and_keeps_credentials_separate(tmp_p
         assert services[name]["environment"]["DATABASE_URL"].startswith("postgresql://coordinator:")
         assert "SESSION_SECRET" not in services[name]["environment"]
         assert not any(v["target"] == "/opt/courses" for v in services[name]["volumes"])
-    storage = next(v for v in services["classport"]["volumes"] if v["target"] == "/opt/courses")
-    assert storage["type"] == "bind" and storage["source"] == str(tmp_path / "data/courses")
-    assert storage.get("bind", {}).get("create_host_path", False) is False
+    for name in ("classport", "worker"):
+        assert not any(v["target"] == "/opt/courses" for v in services[name]["volumes"])
+        storage = next(v for v in services[name]["volumes"] if v["target"] == "/run/classport-storage")
+        assert storage["read_only"] and storage["source"] == "/run/classport-storage"
+        assert storage.get("bind", {}).get("create_host_path", False) is False
+    for name in ("dispatcher", "job-recovery", "frontend", "smoke"):
+        assert not any(v["target"] == "/run/classport-storage" for v in services[name].get("volumes", []))
     for name in ("classport",):
         assert any(v["target"] == "/etc/classport/certs" and v["read_only"] for v in services[name]["volumes"])
     result = subprocess.run([*command, "config", "--services"], cwd=tmp_path, env=env, capture_output=True, text=True, check=True)

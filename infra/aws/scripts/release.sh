@@ -106,6 +106,9 @@ docker run --rm --network host --log-driver local \
 rm -rf "$scratch"
 scratch=''
 pass_step
+if [ -n "${STORAGE_ROLE_ARN:-}" ]; then
+    python3 "$bundle/storage_credentials.py" install
+fi
 start_step application
 export CLASSPORT_APPLICATION_RESULT="$attempt/application-result.json"
 bash "$bundle/deploy-prod.sh" "$bundle"
