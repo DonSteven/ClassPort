@@ -10,7 +10,7 @@ from psycopg_pool import PoolTimeout
 from .. import db
 from ..job_config import LEASE_SECONDS, MAX_ATTEMPTS
 from ..logging_config import job_context, request_id
-from ..storage.base import StorageConflict, StorageNotFound
+from ..storage.base import StorageConflict, StorageNotFound, StorageUnavailable
 
 log = logging.getLogger(__name__)
 ACTIVE = ("queued", "running", "retry_wait")
@@ -31,7 +31,7 @@ async def create(conn, user_id, file_id, version_id) -> dict:
         """INSERT INTO jobs(user_id, file_id, file_version_id, job_type,
                             pipeline_version, request_id)
            VALUES (%s, %s, %s, 'index_file', %s, %s)
-           ON CONFLICT (file_version_id, job_type, pipeline_version) DO NOTHING
+           ON CONFLICT (file_version_id, job_type, pipeline_version) WHERE cleanup_id IS NULL DO NOTHING
            RETURNING *""", (user_id, file_id, version_id, PIPELINE_VERSION, request_id.get()),
     )).fetchone()
     if row is not None:
@@ -75,7 +75,8 @@ async def claim(job_id: UUID, worker_id: str) -> dict | None:
             """SELECT j.* FROM jobs j JOIN file_versions v
                  ON v.user_id = j.user_id AND v.file_id = j.file_id AND v.id = j.file_version_id
                WHERE j.id = %s AND j.status IN ('queued', 'retry_wait')
-                 AND j.next_run_at <= clock_timestamp() AND v.upload_status = 'completed'
+                 AND j.next_run_at <= clock_timestamp()
+                 AND (j.job_type='storage_cleanup' OR v.upload_status = 'completed')
                FOR UPDATE OF j SKIP LOCKED""", (job_id,),
         )).fetchone()
         if job is None:
@@ -133,8 +134,14 @@ async def finish(conn, job, status, code=None, message=None) -> None:
 
 
 async def _retry_or_fail(conn, job, code, message, *, retryable, expired=False):
-    retry = retryable and job["attempt_count"] < MAX_ATTEMPTS
-    delay = min(300, 5 * 2 ** (job["attempt_count"] - 1))
+    failures = job['attempt_count']
+    if job['job_type'] == 'storage_cleanup':
+        failures = 1 + (await (await conn.execute(
+            "SELECT count(*) AS n FROM job_attempts WHERE job_id=%s AND status IN ('failed','expired')",
+            (job['id'],),
+        )).fetchone())['n']
+    retry = retryable and failures < MAX_ATTEMPTS
+    delay = min(300, 5 * 2 ** min(failures - 1, 6))
     await conn.execute(
         """UPDATE job_attempts SET status = %s, error_code = %s, error_message = %s,
              finished_at = clock_timestamp()
@@ -175,12 +182,20 @@ async def run(job_id: UUID, worker_id: str) -> None:
                               "attempt": job["attempt_count"], "execution_id": job["execution_id"],
                               "worker_id": worker_id})
     try:
+        if job['job_type'] == 'storage_cleanup' and job['pipeline_version'] == '1':
+            from . import storage_cleanup
+            await storage_cleanup.run(job)
+            return
         if job["job_type"] != "index_file" or job["pipeline_version"] != PIPELINE_VERSION:
             raise IndexingError("unsupported_pipeline", "This worker cannot process the requested pipeline")
         await index_file(job["user_id"], job["file_id"], job["file_version_id"], job=job)
     except Exception as exc:
         if isinstance(exc, IndexingError):
             code, message, retryable = exc.code, str(exc), exc.retryable
+        elif isinstance(exc, StorageUnavailable):
+            code, message, retryable = 'storage_unavailable', 'File storage is unavailable', True
+        elif isinstance(exc, StorageConflict):
+            code, message, retryable = 'cleanup_conflict', str(exc), False
         elif isinstance(exc, (OperationalError, PoolTimeout)):
             code, message, retryable = "database_unavailable", "Database is unavailable", True
         else:
@@ -221,7 +236,7 @@ async def get(user_id: UUID, job_id: UUID) -> dict:
     job = await db.fetchrow(
         """SELECT j.*, f.current_version_id, f.deleted_at FROM jobs j JOIN files f
              ON f.user_id = j.user_id AND f.id = j.file_id
-           WHERE j.user_id = %s AND j.id = %s""", user_id, job_id,
+           WHERE j.user_id = %s AND j.id = %s AND j.job_type='index_file'""", user_id, job_id,
     )
     if job is None:
         raise StorageNotFound("job not found")
@@ -232,7 +247,7 @@ async def list_jobs(user_id: UUID, file_id: UUID | None = None) -> list[dict]:
     rows = await db.fetch(
         """SELECT j.*, f.current_version_id, f.deleted_at FROM jobs j JOIN files f
              ON f.user_id = j.user_id AND f.id = j.file_id
-           WHERE j.user_id = %s AND (%s::uuid IS NULL OR j.file_id = %s)
+           WHERE j.user_id = %s AND j.job_type='index_file' AND (%s::uuid IS NULL OR j.file_id = %s)
            ORDER BY j.created_at DESC LIMIT 200""", user_id, file_id, file_id,
     )
     return [public(row) for row in rows]
@@ -243,7 +258,7 @@ async def retry(user_id: UUID, job_id: UUID) -> dict:
         # Match the file -> job lock order used by completion and publication.
         file = await (await conn.execute(
             """SELECT f.* FROM files f JOIN jobs j ON j.user_id = f.user_id AND j.file_id = f.id
-               WHERE j.user_id = %s AND j.id = %s FOR UPDATE OF f""", (user_id, job_id),
+               WHERE j.user_id = %s AND j.id = %s AND j.job_type='index_file' FOR UPDATE OF f""", (user_id, job_id),
         )).fetchone()
         if file is None:
             raise StorageNotFound("job not found")

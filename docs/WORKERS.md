@@ -45,7 +45,8 @@ Temporary failures can be retried manually without resetting attempt history.
 | Service | Responsibility | Database access |
 |---|---|---|
 | `classport` | REST/MCP, upload confirmation and queries | Ordinary application login |
-| `worker` | Text extraction and index publication | Ordinary application login |
+| `worker` | Text extraction, index publication and fixed-object cleanup | Ordinary application login |
+| `storage-maintenance` | Bounded cleanup reconciliation | Ordinary application login |
 | `dispatcher` | Send due outbox notifications | Restricted `classport_jobs` login |
 | `job-recovery` | Expired executions and missing notifications | Restricted `classport_jobs` login |
 | `redis` | Notification transport with AOF persistence | None |
@@ -55,7 +56,7 @@ child creates its event loop after fork and uses that same loop for its pool.
 No connection is created in the Celery parent. Graceful exit closes the pool;
 forced termination is recovered through database leases.
 
-Local workers mount the LocalStorage content root read-only. AWS production
+Local workers mount the LocalStorage content root writable for physical cleanup. AWS production
 workers use fixed S3 versions and a restricted credential_process grant; see
 [S3_STORAGE.md](S3_STORAGE.md). Coordinators
 have no content mount, web session secret, migration credentials, or access to
@@ -130,9 +131,9 @@ Application and background services share the same backend image digest in
 production. Releases stop the old background executors before switching them;
 rollback restores the recorded service group. The release smoke check uploads a
 small file, waits for success, checks search/download/MCP and soft-deletes it.
-Immutable object cleanup remains part of the storage retention work.
+Immutable object cleanup follows [the B8 retention policy](STORAGE_LIFECYCLE.md).
 
-Maintenance-window backups stop API, worker, dispatcher and recovery writers,
+Maintenance-window backups stop API, worker, dispatcher, recovery and storage-maintenance writers,
 then verify clean shutdown before exporting data. Restore targets use a fresh
 Redis directory. Before starting consumers, `app.job_coordination restore --once`
 expires restored executions and rebuilds notifications from PostgreSQL.

@@ -45,7 +45,7 @@ def test_runtime_does_not_receive_maintenance_credentials(tmp_path, maintenance_
     assert "MIGRATION_DATABASE_URL" not in runtime
     assert "APP_PASSWORD_HASH" not in runtime
     assert "SESSION_SECRET" not in maintenance
-    for name in ("classport", "worker", "dispatcher", "job-recovery"):
+    for name in ("classport", "worker", "dispatcher", "job-recovery", "storage-maintenance"):
         assert {key: services[name]["environment"][key] for key in job_settings} == job_settings
     for name in ("dispatcher", "job-recovery"):
         assert "SESSION_SECRET" not in services[name]["environment"]
@@ -65,4 +65,4 @@ def test_runtime_does_not_receive_maintenance_credentials(tmp_path, maintenance_
         cwd=tmp_path, env=env, capture_output=True, text=True, timeout=20,
     )
     assert result.returncode == 0, result.stderr
-    assert set(result.stdout.split()) == {"classport", "frontend", "redis", "worker", "dispatcher", "job-recovery"}
+    assert set(result.stdout.split()) == {"classport", "frontend", "redis", "worker", "dispatcher", "job-recovery", "storage-maintenance"}

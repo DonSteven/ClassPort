@@ -9,14 +9,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, Response
-import asyncio
-
-from ..storage import get_storage
-from ..storage.base import ObjectRef
-
 from .. import db
 from ..auth import require_user, User
 from ..intents import files as intent
+from ..services import file_records, material_sync
 
 
 def _sanitize_path(p: str) -> str:
@@ -136,11 +132,7 @@ async def raw_file(request: Request, path: str | None = None, file_id: UUID | No
     else:
         raise HTTPException(400, "provide a path or a file and version ID")
     if meta["storage_backend"] == "s3":
-        target = await asyncio.to_thread(
-            get_storage("s3").download_url, ObjectRef(meta["object_key"], meta["object_version"]),
-            file_id=meta["file_id"], version_id=meta["id"],
-            filename=meta["logical_path"].rsplit("/", 1)[-1], content_type=meta["content_type"],
-        )
+        target = await file_records.version_url(user.id, meta)
         return RedirectResponse(target["url"], status_code=307, headers={"Cache-Control": "private, no-store"})
     data = await intent.read_version(user.id, meta["file_id"], meta["id"])
     name = meta["logical_path"].rsplit("/", 1)[-1]
@@ -169,8 +161,5 @@ async def raw_file(request: Request, path: str | None = None, file_id: UUID | No
 
 
 @router.post("/sync-materials")
-async def sync_materials(course: Optional[str] = Query(default=None)) -> dict[str, Any]:
-    raise HTTPException(
-        503,
-        "Material sync must use versioned file uploads before it can resume on this deployment.",
-    )
+async def sync_materials(course: Optional[str] = Query(default=None), user: User = Depends(require_user)) -> dict[str, Any]:
+    return await material_sync.trigger(user.id, course)

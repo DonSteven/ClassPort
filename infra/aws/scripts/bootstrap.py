@@ -29,10 +29,14 @@ REQUIRED_KEYS = {
     "SESSION_SECRET", "SECRETS_ENCRYPTION_KEY",
 }
 JOB_DEFAULTS = {"JOB_TIME_LIMIT": "120", "JOB_MAX_ATTEMPTS": "3", "JOB_REDELIVERY_SECONDS": "60"}
+MATERIAL_KEYS = {
+    'INTERNAL_API_SECRET', 'N8N_MATERIALS_WEBHOOK_URL', 'N8N_MATERIALS_PROTOCOL',
+    'STORAGE_RETENTION_SECONDS', 'STORAGE_UPLOAD_GRACE_SECONDS',
+}
 
 
 def validate_config(config):
-    if not REQUIRED_KEYS <= config.keys() or config.keys() - REQUIRED_KEYS - JOB_DEFAULTS.keys() or any(
+    if not REQUIRED_KEYS <= config.keys() or config.keys() - REQUIRED_KEYS - JOB_DEFAULTS.keys() - MATERIAL_KEYS or any(
         not isinstance(value, str) or not value or "\n" in value or "\r" in value or "\0" in value
         for value in config.values()
     ):
@@ -40,6 +44,11 @@ def validate_config(config):
     for name, default in JOB_DEFAULTS.items():
         if int(config.get(name, default)) < (2 if name == "JOB_TIME_LIMIT" else 1):
             raise ValueError(f"Invalid {name}")
+    for name, minimum in (('STORAGE_RETENTION_SECONDS', 0), ('STORAGE_UPLOAD_GRACE_SECONDS', 1)):
+        if name in config and int(config[name]) < minimum:
+            raise ValueError(f'Invalid {name}')
+    if config.get('N8N_MATERIALS_PROTOCOL', 'versioned-v1') != 'versioned-v1':
+        raise ValueError('Unsupported material import protocol')
     if config["OPERATOR_EMAIL"].strip().lower() == config["SMOKE_EMAIL"].strip().lower():
         raise ValueError("The release check account must be separate from the operator")
     if len({config[key] for key in ("APP_DB_PASSWORD", "MIGRATION_DB_PASSWORD", "COORDINATOR_DB_PASSWORD")}) != 3:
@@ -143,6 +152,7 @@ def configure_runtime(config, root):
         "PUBLIC_URL": os.environ["PUBLIC_URL"], "CORS_ORIGINS": os.environ["PUBLIC_URL"],
         "OPERATOR_EMAIL": config["OPERATOR_EMAIL"].strip().lower(), "OPERATOR_USER_ID": OPERATOR_ID,
         "SIGNUPS_ENABLED": "false",
+        **{name: config[name] for name in MATERIAL_KEYS if name in config},
         **({"STORAGE_BACKEND": "s3", "S3_BUCKET": os.environ["S3_BUCKET"],
             "AWS_REGION": os.environ["AWS_REGION"], "AWS_PROFILE": "classport-storage",
             "AWS_CONFIG_FILE": "/run/classport-storage/config", "AWS_EC2_METADATA_DISABLED": "true"}
@@ -216,7 +226,7 @@ def bootstrap(config, master, root, result_path):
     def configuration():
         if os.environ.get("S3_BUCKET"):
             with psycopg.connect(migration_dsn) as conn:
-                if conn.execute("SELECT EXISTS (SELECT 1 FROM file_versions WHERE storage_backend='local' AND upload_status='completed')").fetchone()[0]:
+                if conn.execute("SELECT EXISTS (SELECT 1 FROM file_versions WHERE storage_backend='local' AND upload_status='completed' AND content_state='available')").fetchone()[0]:
                     print("S3 cutover requires B8 migration of completed local versions.", file=sys.stderr)
                     raise ValueError("Local material versions remain")
         configure_runtime(config, root)

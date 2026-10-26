@@ -25,7 +25,7 @@ from uuid import uuid4
 PG_IMAGE = "postgres:16-alpine"
 CURRENT_STAGE = "preflight"
 RELEASE_FILES = ("release.env", "docker-compose.prod.yml", "deploy-prod.sh", "bootstrap.py", "recovery.py", "storage_credentials.py")
-WRITERS = ("classport", "frontend", "worker", "dispatcher", "job-recovery")
+WRITERS = ("classport", "frontend", "worker", "dispatcher", "job-recovery", "storage-maintenance")
 STATE_SQL = """SELECT json_build_object(
  'migrations', (SELECT json_agg(m ORDER BY filename) FROM public._migrations m),
  'users', (SELECT count(*) FROM users), 'courses', (SELECT count(*) FROM courses),
@@ -33,11 +33,21 @@ STATE_SQL = """SELECT json_build_object(
  'files', (SELECT count(*) FROM files), 'file_versions', (SELECT count(*) FROM file_versions),
  'jobs', (SELECT count(*) FROM jobs), 'job_attempts', (SELECT count(*) FROM job_attempts),
  'references', (SELECT coalesce(json_agg(object_key ORDER BY object_key), '[]')
-                FROM file_versions WHERE storage_backend = 'local' AND upload_status = 'completed'),
+                FROM file_versions WHERE storage_backend = 'local' AND upload_status = 'completed'
+                    AND content_state = 'available'),
  's3_references', (SELECT coalesce(json_agg(json_build_object(
        'id', id, 'key', object_key, 'version_id', object_version, 'bytes', size,
        'sha256', sha256, 'content_type', content_type) ORDER BY id), '[]')
-       FROM file_versions WHERE storage_backend = 's3' AND upload_status = 'completed'))"""
+       FROM file_versions WHERE storage_backend = 's3' AND upload_status = 'completed'
+           AND content_state = 'available'))"""
+
+# Source-environment physical targets cannot be replayed in a restored bucket.
+RESET_STORAGE_SQL = """
+DELETE FROM jobs WHERE job_type='storage_cleanup';
+DELETE FROM storage_cleanup;
+DELETE FROM storage_migrations;
+UPDATE file_versions SET content_state='purged' WHERE content_state='retiring';
+"""
 
 
 def progress(stage):
@@ -401,6 +411,10 @@ def restore(root, settings, args):
             subprocess.run(["python3", str(release / "storage_credentials.py"), "install"],
                            env={**os.environ, **target}, check=True)
             restore_materials(work, root, config, target, manifest["materials"])
+        # Physical deletion targets belong to the source environment. Reconcile
+        # fresh targets after restore rather than replaying source VersionIds.
+        pg(work, root, config, target, "psql", "-X", "-v", "ON_ERROR_STOP=1", "-c",
+           'BEGIN;\n' + RESET_STORAGE_SQL + '\nCOMMIT;')
         progress("restore.configuration")
         phase(work, root, config, master, target, version["BACKEND_IMAGE"], "configure")
         (root / "releases/current").symlink_to(release)

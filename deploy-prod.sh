@@ -44,7 +44,7 @@ compose() {
 stop_background() {
     local release="$1" available service
     available=$(compose "$release" config --services)
-    for service in dispatcher job-recovery worker; do
+    for service in storage-maintenance dispatcher job-recovery worker; do
         if [[ $'\n'"$available"$'\n' == *$'\n'"$service"$'\n'* ]]; then
             compose "$release" stop "$service" || return 1
         fi
@@ -84,7 +84,7 @@ verify_images() {
     local release="$1" backend frontend container actual service expected
     load_manifest "$release/release.env"
     backend="$BACKEND_IMAGE"; frontend="$FRONTEND_IMAGE"
-    for service in classport frontend worker dispatcher job-recovery; do
+    for service in classport frontend worker dispatcher job-recovery storage-maintenance; do
         if [[ $'\n'"$(compose "$release" config --services)"$'\n' != *$'\n'"$service"$'\n'* ]]; then
             continue
         fi

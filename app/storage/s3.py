@@ -79,6 +79,22 @@ class S3Storage:
     async def delete(self, ref: ObjectRef) -> None:
         await self._run(self.client.delete_object, **self._params(ref))
 
+    async def versions(self, key: str, *, include_delete_markers=True) -> list[ObjectRef]:
+        """Enumerate exact-key versions and delete markers, including pagination."""
+        def listing():
+            refs = []
+            for page in self.client.get_paginator('list_object_versions').paginate(
+                Bucket=self.bucket, Prefix=key,
+            ):
+                items = page.get('Versions', [])
+                if include_delete_markers:
+                    items = items + page.get('DeleteMarkers', [])
+                for item in items:
+                    if item['Key'] == key:
+                        refs.append(ObjectRef(key, item['VersionId']))
+            return refs
+        return await self._run(lambda: listing())
+
     async def check_readable(self) -> None:
         response = await self._run(self.client.get_bucket_versioning, Bucket=self.bucket)
         if response.get("Status") != "Enabled":

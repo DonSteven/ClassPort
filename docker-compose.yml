@@ -80,7 +80,7 @@ services:
       retries: 6
     networks: [internal]
 
-  worker:
+  worker: &material-worker
     image: classport:latest
     restart: unless-stopped
     command: [uv, run, --no-sync, celery, -A, "app.celery_app:celery", worker, --pool=prefork, "--concurrency=${WORKER_CONCURRENCY:-1}"]
@@ -95,7 +95,7 @@ services:
       DB_POOL_MIN_SIZE: "1"
       DB_POOL_MAX_SIZE: "2"
     volumes:
-      - /opt/courses:/opt/courses:ro
+      - /opt/courses:/opt/courses
       - ./certs:/etc/classport/certs:ro
     stop_grace_period: 150s
     mem_limit: 512m
@@ -107,6 +107,16 @@ services:
       retries: 4
       start_period: 15s
     networks: [internal]
+
+  storage-maintenance:
+    <<: *material-worker
+    command: [uv, run, --no-sync, python, -m, app.storage_maintenance, --all-users]
+    healthcheck:
+      test: [CMD, python, -c, "import pathlib,time; assert time.time()-pathlib.Path('/tmp/classport-storage-maintenance.heartbeat').stat().st_mtime < 180"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
 
   dispatcher: &coordinator
     image: classport:latest

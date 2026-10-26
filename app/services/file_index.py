@@ -90,6 +90,9 @@ async def index_file(user_id: UUID, file_id: UUID, version_id: UUID, *,
                            and source["indexed_pipeline_version"] == PIPELINE_VERSION)
         if (source["deleted_at"] is None and source["current_version_id"] == str(version_id)
                 and not already_indexed):
+            from .file_records import protect_read
+            from ..storage_config import upload_grace_seconds
+            await protect_read(user_id, file_id, version_id, upload_grace_seconds(), source=source)
             with operation("index.read"):
                 data = await get_storage(source["storage_backend"]).read(
                     ObjectRef(source["object_key"], source["object_version"]),

@@ -660,7 +660,7 @@ export function useSyncMaterials() {
       const path = course
         ? `/api/files/sync-materials?course=${encodeURIComponent(course)}`
         : "/api/files/sync-materials";
-      return api.post<{ ok: boolean; written_count: number; plan: { newOrChanged?: number; unchanged?: number; errors?: number }; errors: number; course?: string }>(
+      return api.post<{ protocol: "versioned-v1"; written_count: number; unchanged: number; errors: { path: string; error: string }[] }>(
         path,
         {}
       );

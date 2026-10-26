@@ -33,6 +33,8 @@ def test_config_validation_and_raw_secret_files(tmp_path, monkeypatch, job_setti
         SECRETS_ENCRYPTION_KEY=Fernet.generate_key().decode(),
     )
     config.update(job_settings)
+    config.update(STORAGE_RETENTION_SECONDS='604800', STORAGE_UPLOAD_GRACE_SECONDS='3600',
+                  N8N_MATERIALS_PROTOCOL='versioned-v1')
     bootstrap.validate_config(config)
     with pytest.raises(ValueError):
         bootstrap.validate_config({**config, "SESSION_SECRET": "value\nMIGRATION_DATABASE_URL=bad"})
@@ -48,6 +50,8 @@ def test_config_validation_and_raw_secret_files(tmp_path, monkeypatch, job_setti
     monkeypatch.setenv("DB_NAME", "study")
     monkeypatch.setenv("PUBLIC_URL", "https://study.example.test")
     bootstrap.configure_runtime(config, tmp_path)
+    assert 'STORAGE_RETENTION_SECONDS=604800' in (tmp_path / '.env').read_text()
+    assert 'N8N_MATERIALS_PROTOCOL=versioned-v1' in (tmp_path / '.env').read_text()
     expected = {**bootstrap.JOB_DEFAULTS, **job_settings}
     assert (tmp_path / ".env.jobs").read_text() == "".join(f"{key}={value}\n" for key, value in expected.items())
     assert (tmp_path / ".env.jobs").stat().st_mode & 0o777 == 0o600

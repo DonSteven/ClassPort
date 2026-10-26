@@ -14,6 +14,7 @@ from .. import db
 from ..schemas import EventCreate
 from ..storage import get_storage
 from ..storage.base import ObjectRef, StorageConflict, StorageNotFound
+from ..storage_config import upload_grace_seconds
 from . import events as events_svc
 from . import file_index as index_svc
 from . import jobs as jobs_svc
@@ -181,8 +182,12 @@ async def begin_upload(user_id: UUID, path: str, *, size: int | None = None,
                FROM file_versions WHERE user_id = %s AND file_id = %s RETURNING *""",
             (version_id, user_id, file["id"], key, backend, size, sha256, mime, user_id, file["id"]),
         )).fetchone()
-    target = await asyncio.to_thread(store.upload_url, ObjectRef(key), file_id=file["id"],
-                                     version_id=version["id"], content_type=mime, sha256=sha256)
+        target = await asyncio.to_thread(store.upload_url, ObjectRef(key), file_id=file["id"],
+                                         version_id=version["id"], content_type=mime, sha256=sha256)
+        await conn.execute(
+            "UPDATE file_versions SET upload_expires_at=clock_timestamp()+%s*interval '1 second' WHERE id=%s",
+            (target['expires_in'], version_id),
+        )
     return {"path": path, "file_id": file["id"], "version_id": version["id"],
             "storage_backend": backend, **target}
 
@@ -203,6 +208,11 @@ async def accept_upload(user_id: UUID, file_id: UUID, version_id: UUID,
             raise StorageNotFound("file version not found")
         if row["upload_status"] != "pending":
             raise StorageConflict("file version is already completed or abandoned")
+        valid = await (await conn.execute(
+            'SELECT upload_expires_at>clock_timestamp() AS valid FROM file_versions WHERE id=%s', (version_id,),
+        )).fetchone()
+        if not valid['valid']:
+            raise StorageConflict('upload authorization expired')
         mime = content_type or mimetypes.guess_type(row["logical_path"])[0]
         mime = mime or "application/octet-stream"
         store = get_storage(row["storage_backend"])
@@ -239,6 +249,8 @@ async def complete_upload(user_id: UUID, file_id: UUID, version_id: UUID,
     )
     if source is None:
         raise StorageNotFound("file version not found")
+    if source['content_state'] != 'available':
+        raise StorageConflict('file content was retired')
     candidate = source["object_version"] or object_version
     if object_version and source["object_version"] and object_version != source["object_version"]:
         raise StorageConflict("file version is already bound to different content")
@@ -275,6 +287,8 @@ async def complete_upload(user_id: UUID, file_id: UUID, version_id: UUID,
             raise StorageNotFound("file version not found")
         if row["upload_status"] == "abandoned":
             raise StorageConflict("upload was abandoned")
+        if row['content_state'] != 'available':
+            raise StorageConflict('file content was retired')
         if row["object_version"] and candidate != row["object_version"]:
             raise StorageConflict("file version is already bound to different content")
         if row["upload_status"] == "pending":
@@ -301,8 +315,18 @@ async def complete_upload(user_id: UUID, file_id: UUID, version_id: UUID,
                FROM files f WHERE j.user_id = %s AND j.file_id = %s
                  AND f.user_id = j.user_id AND f.id = j.file_id
                  AND j.file_version_id <> f.current_version_id
+                 AND j.job_type='index_file'
                  AND j.status IN ('queued', 'retry_wait')""", (user_id, file_id),
         )
+        from . import storage_cleanup
+        retired = await (await conn.execute(
+            """UPDATE file_versions v SET retired_at=coalesce(retired_at,clock_timestamp()) FROM files f
+               WHERE v.user_id=%s AND v.file_id=%s AND f.user_id=v.user_id AND f.id=v.file_id
+                 AND v.id<>f.current_version_id AND v.upload_status='completed'
+               RETURNING v.*,f.deleted_at""", (user_id, file_id),
+        )).fetchall()
+        for old in retired:
+            await storage_cleanup.schedule_content(conn, old)
         job = await (await conn.execute(
             "SELECT * FROM jobs WHERE user_id = %s AND id = %s", (user_id, job["id"]),
         )).fetchone()
@@ -325,7 +349,7 @@ async def get_version(user_id: UUID, file_id: UUID, version_id: UUID) -> dict:
         """SELECT v.*, f.logical_path, f.course_code FROM file_versions v JOIN files f
              ON f.user_id = v.user_id AND f.id = v.file_id
            WHERE v.user_id = %s AND v.file_id = %s AND v.id = %s
-             AND v.upload_status = 'completed' AND f.deleted_at IS NULL""",
+             AND v.upload_status = 'completed' AND v.content_state='available' AND f.deleted_at IS NULL""",
         user_id, file_id, version_id,
     )
     if row is None:
@@ -339,7 +363,7 @@ async def current_version(user_id: UUID, path: str) -> dict:
         """SELECT v.*, f.logical_path, f.course_code FROM files f JOIN file_versions v
              ON v.user_id = f.user_id AND v.file_id = f.id AND v.id = f.current_version_id
            WHERE f.user_id = %s AND f.logical_path = %s AND f.deleted_at IS NULL
-             AND v.upload_status = 'completed'""", user_id, path,
+             AND v.upload_status = 'completed' AND v.content_state='available'""", user_id, path,
     )
     if row is None:
         raise StorageNotFound("file not found")
@@ -348,6 +372,7 @@ async def current_version(user_id: UUID, path: str) -> dict:
 
 async def read_version(user_id: UUID, file_id: UUID, version_id: UUID) -> bytes:
     row = await get_version(user_id, file_id, version_id)
+    await protect_read(user_id, file_id, version_id, upload_grace_seconds(), source=row)
     data = await get_storage(row["storage_backend"]).read(
         ObjectRef(row["object_key"], row["object_version"]),
     )
@@ -376,12 +401,39 @@ async def exists(user_id: UUID, path: str) -> bool:
 
 async def signed_url(user_id: UUID, path: str, expires_in: int = 3600) -> dict:
     row = await current_version(user_id, path)
-    return await asyncio.to_thread(
+    return await version_url(user_id, row, expires_in)
+
+
+async def protect_read(user_id, file_id, version_id, seconds, *, source=None):
+    async with db.db() as conn, conn.transaction():
+        await _lock_tree(conn, user_id)
+        row = await (await conn.execute(
+            """UPDATE file_versions v SET read_expires_at=greatest(read_expires_at,
+                 clock_timestamp()+%s*interval '1 second') FROM files f
+               WHERE v.user_id=%s AND v.file_id=%s AND v.id=%s AND f.user_id=v.user_id AND f.id=v.file_id
+                 AND f.deleted_at IS NULL AND v.content_state='available' RETURNING v.id""",
+            (seconds, user_id, file_id, version_id),
+        )).fetchone()
+        if row is None:
+            raise StorageNotFound('file version not found')
+        if source and source['storage_backend'] == 'local':
+            await conn.execute(
+                """UPDATE storage_migrations SET retain_until=greatest(retain_until,
+                     clock_timestamp()+%s*interval '1 second')
+                   WHERE user_id=%s AND file_version_id=%s AND source_key=%s AND status='completed'""",
+                (seconds, user_id, version_id, source['object_key']),
+            )
+
+
+async def version_url(user_id, row, expires_in=3600):
+    target = await asyncio.to_thread(
         get_storage(row["storage_backend"]).download_url,
         ObjectRef(row["object_key"], row["object_version"]), file_id=row["file_id"],
         version_id=row["id"], expires_in=expires_in,
         filename=row["logical_path"].rsplit("/", 1)[-1], content_type=row["content_type"],
     )
+    await protect_read(user_id, row['file_id'], row['id'], target['expires_in'] + upload_grace_seconds(), source=row)
+    return target
 
 
 async def delete(user_id: UUID, paths: list[str]) -> dict:
@@ -403,9 +455,17 @@ async def delete(user_id: UUID, paths: list[str]) -> dict:
                  last_error = 'File was deleted', finished_at = now(), updated_at = now()
                FROM files f WHERE j.user_id = %s AND f.user_id = j.user_id
                  AND f.id = j.file_id AND f.deleted_at IS NOT NULL
+                 AND j.job_type='index_file'
                  AND j.status IN ('queued', 'retry_wait')""", (user_id,),
         )
-    # Keep immutable bytes for the retention/cleanup policy in B8.
+        from . import storage_cleanup
+        versions = await (await conn.execute(
+            """SELECT v.*,f.deleted_at FROM file_versions v JOIN files f
+               ON f.user_id=v.user_id AND f.id=v.file_id
+               WHERE v.user_id=%s AND f.deleted_at IS NOT NULL""", (user_id,),
+        )).fetchall()
+        for version in versions:
+            await storage_cleanup.schedule_content(conn, version)
     await _log(user_id, "storage:delete", {"paths": paths, "count": len(deleted)})
     return {"deleted": sorted(set(deleted))}
 

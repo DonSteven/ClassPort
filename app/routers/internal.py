@@ -13,12 +13,15 @@ import logging
 import os
 from uuid import UUID
 
-from fastapi import APIRouter, Header, HTTPException, Request, status
+from fastapi import APIRouter, Body, Header, HTTPException, Request, status
 
 from ..auth import set_current_user_id
+from .. import db
 from ..services import jobs as jobs_svc
 from ..services import telegram as telegram_svc
 from ..services import user_secrets as user_secrets_svc
+from ..services import file_records, material_sync
+from ..storage.base import StorageNotFound
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 log = logging.getLogger(__name__)
@@ -31,6 +34,57 @@ def _check_secret(provided: str | None) -> None:
                             detail="INTERNAL_API_SECRET not configured on server")
     if not provided or provided.strip() != expected:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="bad secret")
+
+
+@router.post('/materials/upload-url')
+async def material_upload(body: dict = Body(...),
+                          x_internal_secret: str | None = Header(default=None, alias='X-Internal-Secret')):
+    _check_secret(x_internal_secret)
+    owner = await material_sync.import_user(body.get('user_id'))
+    if body.get('scheduled') and await material_sync.paused(owner):
+        raise HTTPException(409, 'scheduled material import is paused')
+    path = body.get('path', '')
+    if not isinstance(path, str):
+        raise HTTPException(400, 'invalid path')
+    try:
+        current = await file_records.current_version(owner, path)
+    except StorageNotFound:
+        current = None
+    if current and (current['size'], current['sha256']) == (body.get('size'), body.get('sha256')):
+        return {'reused': True, 'file_id': current['file_id'], 'version_id': current['id']}
+    return await file_records.begin_upload(owner, path, size=body.get('size'),
+                                           sha256=body.get('sha256'), content_type=body.get('content_type'))
+
+
+@router.put('/materials/{file_id}/versions/{version_id}/content')
+async def material_content(file_id: UUID, version_id: UUID, user_id: UUID, request: Request,
+                           x_internal_secret: str | None = Header(default=None, alias='X-Internal-Secret')):
+    _check_secret(x_internal_secret)
+    owner = await material_sync.import_user(user_id)
+    row = await db.fetchrow('SELECT storage_backend FROM file_versions WHERE user_id=%s AND file_id=%s AND id=%s',
+                            owner, file_id, version_id)
+    if not row:
+        raise HTTPException(404, 'file version not found')
+    if row['storage_backend'] != 'local':
+        raise HTTPException(409, 'send content directly to the issued S3 URL')
+    return await file_records.accept_upload(owner, file_id, version_id, await request.body(),
+                                            request.headers.get('content-type'))
+
+
+@router.post('/materials/{file_id}/versions/{version_id}/complete')
+async def material_complete(file_id: UUID, version_id: UUID, body: dict = Body(...),
+                            x_internal_secret: str | None = Header(default=None, alias='X-Internal-Secret')):
+    _check_secret(x_internal_secret)
+    owner = await material_sync.import_user(body.get('user_id'))
+    return await file_records.complete_upload(owner, file_id, version_id, body.get('object_version'))
+
+
+@router.get('/materials/schedule')
+async def material_schedule(user_id: UUID,
+                            x_internal_secret: str | None = Header(default=None, alias='X-Internal-Secret')):
+    _check_secret(x_internal_secret)
+    owner = await material_sync.import_user(user_id)
+    return {'user_id': str(owner), 'paused': await material_sync.paused(owner)}
 
 
 @router.post("/sync")

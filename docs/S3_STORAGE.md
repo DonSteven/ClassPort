@@ -84,7 +84,7 @@ no material-directory mounts. Redis and maintenance backups still use host stora
 The host's environment must include `S3_BUCKET` and `STORAGE_ROLE_ARN` generated
 by the updated Terraform configuration.
 
-Existing completed LocalStorage versions require B8 migration and verification
+Existing available completed LocalStorage versions require B8 migration and verification
 before switching to the production S3 configuration. Changing a default backend
 does not move existing bytes. Keep old sources and backups through the rollback
 window; do not delete old directories or introduce automatic object expiry here.
@@ -93,8 +93,8 @@ Backups enumerate all completed S3 versions, including historical versions. They
 read each exact source version, verify bytes/checksum, and write an independent
 copy into the backup bucket before publishing the manifest. Restore uploads copies
 to the target material bucket and updates database mappings with the **new**
-VersionIds. Source VersionIds are never assumed valid in another bucket. B8 still
-owns abandoned-upload cleanup and retention rules covering backup references.
+VersionIds. Source VersionIds are never assumed valid in another bucket. [B8 lifecycle](STORAGE_LIFECYCLE.md) implements abandoned-upload cleanup,
+retention, physical-version reconciliation and restore-time cleanup reset.
 
 ## Validation status
 

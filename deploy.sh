@@ -213,8 +213,8 @@ fi
 # ── roll forward ─────────────────────────────────────────────────────────────
 
 log "starting new classport + recreating frontend..."
-$COMPOSE stop dispatcher job-recovery worker
-$COMPOSE up -d classport redis worker dispatcher job-recovery
+$COMPOSE stop storage-maintenance dispatcher job-recovery worker
+$COMPOSE up -d classport redis worker dispatcher job-recovery storage-maintenance
 # Force-recreate frontend so it picks up its newly built image — without
 # this, the running frontend container keeps serving the previous build
 # even though `compose build` just produced a fresh image.
@@ -247,7 +247,7 @@ fi
 log "ROLLBACK: re-tagging classport:previous as classport:latest..."
 docker tag classport:previous classport:latest
 docker tag classport-frontend:previous classport-frontend:latest
-$COMPOSE stop dispatcher job-recovery worker
+$COMPOSE stop storage-maintenance dispatcher job-recovery worker
 log "ROLLBACK: recreating classport container..."
 if [ "$(docker image inspect --format '{{ index .Config.Labels "org.classport.file-jobs" }}' classport:previous)" = 1 ]; then
     $COMPOSE up -d --force-recreate classport frontend worker dispatcher job-recovery

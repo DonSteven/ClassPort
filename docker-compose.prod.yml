@@ -49,7 +49,7 @@ services:
       retries: 6
     networks: [internal]
 
-  worker:
+  worker: &material-worker
     image: ${BACKEND_IMAGE:?Set the backend image digest in release.env}
     restart: unless-stopped
     command: [uv, run, --no-sync, celery, -A, "app.celery_app:celery", worker, --pool=prefork, "--concurrency=${WORKER_CONCURRENCY:-1}"]
@@ -85,6 +85,16 @@ services:
       retries: 4
       start_period: 15s
     networks: [internal]
+
+  storage-maintenance:
+    <<: *material-worker
+    command: [uv, run, --no-sync, python, -m, app.storage_maintenance, --all-users]
+    healthcheck:
+      test: [CMD, python, -c, "import pathlib,time; assert time.time()-pathlib.Path('/tmp/classport-storage-maintenance.heartbeat').stat().st_mtime < 180"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
 
   dispatcher: &coordinator
     image: ${BACKEND_IMAGE:?Set the backend image digest in release.env}

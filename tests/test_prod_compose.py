@@ -34,7 +34,7 @@ def test_production_uses_only_pinned_images_and_keeps_credentials_separate(tmp_p
         cwd=tmp_path, env=env, capture_output=True, text=True, check=True,
     )
     services = json.loads(result.stdout)["services"]
-    assert set(services) == {"classport", "frontend", "smoke", "redis", "worker", "dispatcher", "job-recovery"}
+    assert set(services) == {"classport", "frontend", "smoke", "redis", "worker", "dispatcher", "job-recovery", "storage-maintenance"}
     assert all("build" not in service and "@sha256:" in service["image"] for service in services.values())
     assert services["classport"]["image"] == services["smoke"]["image"]
     runtime = services["classport"]["environment"]
@@ -42,16 +42,16 @@ def test_production_uses_only_pinned_images_and_keeps_credentials_separate(tmp_p
     assert "SMOKE_PASSWORD" not in runtime and "SMOKE_MCP_TOKEN" not in runtime
     assert "MIGRATION_DATABASE_URL" not in services["smoke"]["environment"]
     assert all("ports" not in services[name] for name in ("classport", "worker", "dispatcher", "job-recovery", "redis"))
-    for name in ("worker", "dispatcher", "job-recovery"):
+    for name in ("worker", "dispatcher", "job-recovery", "storage-maintenance"):
         assert services[name]["image"] == services["classport"]["image"]
         assert "MIGRATION_DATABASE_URL" not in services[name]["environment"]
-    for name in ("classport", "worker", "dispatcher", "job-recovery"):
+    for name in ("classport", "worker", "dispatcher", "job-recovery", "storage-maintenance"):
         assert {key: services[name]["environment"][key] for key in job_settings} == job_settings
     for name in ("dispatcher", "job-recovery"):
         assert services[name]["environment"]["DATABASE_URL"].startswith("postgresql://coordinator:")
         assert "SESSION_SECRET" not in services[name]["environment"]
         assert not any(v["target"] == "/opt/courses" for v in services[name]["volumes"])
-    for name in ("classport", "worker"):
+    for name in ("classport", "worker", "storage-maintenance"):
         assert not any(v["target"] == "/opt/courses" for v in services[name]["volumes"])
         storage = next(v for v in services[name]["volumes"] if v["target"] == "/run/classport-storage")
         assert storage["read_only"] and storage["source"] == "/run/classport-storage"
@@ -61,4 +61,4 @@ def test_production_uses_only_pinned_images_and_keeps_credentials_separate(tmp_p
     for name in ("classport",):
         assert any(v["target"] == "/etc/classport/certs" and v["read_only"] for v in services[name]["volumes"])
     result = subprocess.run([*command, "config", "--services"], cwd=tmp_path, env=env, capture_output=True, text=True, check=True)
-    assert set(result.stdout.split()) == {"classport", "frontend", "redis", "worker", "dispatcher", "job-recovery"}
+    assert set(result.stdout.split()) == {"classport", "frontend", "redis", "worker", "dispatcher", "job-recovery", "storage-maintenance"}

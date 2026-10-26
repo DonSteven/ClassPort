@@ -48,15 +48,15 @@ and cannot pause for an import between files.
 6. Start the new application only after migration succeeds. Resume only
    writers that use the new upload service. A workflow that writes directly to
    the legacy directory must remain stopped until it uses versioned uploads.
-   `/api/files/sync-materials` returns 503 until the versioned workflow is connected
-   in B8, preventing an old webhook from reporting invisible new files.
+   `/api/files/sync-materials` requires a workflow explicitly configured for the
+   versioned import protocol; see [B8 imports](STORAGE_LIFECYCLE.md#external-material-imports).
 
 Retain source trees and the pre-cutover backup through the rollback window.
 There is no dual-write mode. After new uploads begin, rolling back application
 code alone cannot expose those new objects to the old path-based browser;
 coordinate any data rollback with the backup point. Do not automatically delete
 legacy trees or completed version objects. Object retention/cleanup and cloud
-migration are B8 work.
+migration follow [the B8 lifecycle](STORAGE_LIFECYCLE.md).
 
 The import is separate from SQL migrations. Do not skip directly from a legacy
 release to the B3 migration batch: first finish and verify the B2 stage. A fresh,
@@ -83,7 +83,8 @@ through an old version URL.
 
 Empty directories are database records, with no `.keep` object. File and directory
 renames update metadata in a transaction without moving version objects. Deletes
-hide the affected subtree; bytes remain available for the future retention policy.
+hide the affected subtree; bytes remain available through the configured retention period, then durable
+cleanup tasks retire them. Historical version reads stop after retirement.
 
 ## Single-file indexing and rebuilds
 

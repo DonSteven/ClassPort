@@ -70,7 +70,7 @@ resource "aws_iam_role_policy" "storage" {
     Statement = [
       { Effect = "Allow", Action = ["s3:GetBucketVersioning"], Resource = aws_s3_bucket.materials.arn },
       {
-        Effect    = "Allow", Action = ["s3:ListBucket"], Resource = aws_s3_bucket.materials.arn
+        Effect    = "Allow", Action = ["s3:ListBucket", "s3:ListBucketVersions"], Resource = aws_s3_bucket.materials.arn
         Condition = { StringLike = { "s3:prefix" = ["objects/*"] } }
       },
       {
