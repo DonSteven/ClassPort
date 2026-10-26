@@ -109,3 +109,5 @@ scripts/_deprecated/
 # Local planning notes.
 docs/superpowers/
 
+
+/test-results/

@@ -1,0 +1,510 @@
+{
+  "validated_at": "2026-10-26T00:35:55.359624+00:00",
+  "environment": "local disposable PostgreSQL/Redis; no AWS calls",
+  "validated_cases": 124,
+  "validation_note": "The focused batch passed 123 cases; the new multi-user test was corrected and passed on its targeted rerun. The full batch was not rerun.",
+  "infrastructure_mock_tests": {
+    "passed": 6,
+    "failed": 0
+  },
+  "ruff": "passed",
+  "diff_whitespace_check": "passed",
+  "cases": [
+    {
+      "test": "tests.test_worker_processes.test_stopped_worker_queued_then_real_worker_handles_two_users_and_reuses_loop",
+      "passed": true
+    },
+    {
+      "test": "tests.test_worker_processes.test_redis_loses_notifications_and_database_rebuilds_them",
+      "passed": true
+    },
+    {
+      "test": "tests.test_worker_processes.test_dispatcher_killed_after_send_can_resend_without_duplicate_execution",
+      "passed": true
+    },
+    {
+      "test": "tests.test_worker_processes.test_killed_worker_is_recovered_by_an_independent_process",
+      "passed": true
+    },
+    {
+      "test": "tests.test_worker_processes.test_coordinator_credentials_cannot_read_content_credentials_or_create_schema",
+      "passed": true
+    },
+    {
+      "test": "tests.test_worker_processes.test_api_accepts_while_redis_is_down_then_processes",
+      "passed": true
+    },
+    {
+      "test": "tests.test_worker_processes.test_api_termination_around_commit_preserves_acceptance[False]",
+      "passed": true
+    },
+    {
+      "test": "tests.test_worker_processes.test_api_termination_around_commit_preserves_acceptance[True]",
+      "passed": true
+    },
+    {
+      "test": "tests.test_worker_processes.test_hard_timeout_and_natural_lease_recovery_use_shared_settings",
+      "passed": true
+    },
+    {
+      "test": "tests.test_worker_processes.test_recovery_uses_nondefault_attempt_budget",
+      "passed": true
+    },
+    {
+      "test": "tests.test_worker_processes.test_two_users_rest_mcp_and_workers_share_no_content",
+      "passed": true
+    },
+    {
+      "test": "tests.test_worker_processes.test_real_worker_reports_permanent_errors_and_only_publishes_current_files",
+      "passed": true
+    },
+    {
+      "test": "tests.test_worker_s3.test_worker_process_uses_fixed_remote_version",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_jobs.test_completion_is_atomic_and_idempotent_without_a_broker",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_jobs.test_duplicate_delivery_runs_one_attempt_and_publishes_search",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_jobs.test_index_and_success_are_one_transaction",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_jobs.test_expired_execution_cannot_publish_after_recovery",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_jobs.test_expired_lease_alone_rejects_publication",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_jobs.test_database_metrics_and_restore_recover_running_work",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_jobs.test_transient_errors_wait_then_retry_and_exhaust_budget",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_jobs.test_corrupt_pdf_is_permanent_and_other_files_continue",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_jobs.test_retry_explains_status_and_does_not_create_notifications[queued-None-already waiting or processing]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_jobs.test_retry_explains_status_and_does_not_create_notifications[running-None-already waiting or processing]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_jobs.test_retry_explains_status_and_does_not_create_notifications[retry_wait-worker_lost-already waiting or processing]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_jobs.test_retry_explains_status_and_does_not_create_notifications[succeeded-None-Only failed processing]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_jobs.test_retry_explains_status_and_does_not_create_notifications[cancelled-version_changed-Only failed processing]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_jobs.test_dispatch_interruption_duplicates_and_lost_notifications_recover",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_jobs.test_outdated_deleted_and_unsupported_pipeline_jobs_cannot_publish",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_jobs.test_api_completion_and_jobs_are_scoped_to_authenticated_user",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_jobs.test_metrics_exclude_retention_backoff_and_historical_retries",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_jobs.test_metrics_split_cleanup_and_exclude_deferred_or_expired_processing",
+      "passed": true
+    },
+    {
+      "test": "tests.test_backup_recovery.test_archive_round_trip_keeps_hidden_files_versions_and_original_secret",
+      "passed": true
+    },
+    {
+      "test": "tests.test_backup_recovery.test_failed_upload_resumes_services_without_publishing_manifest",
+      "passed": true
+    },
+    {
+      "test": "tests.test_backup_recovery.test_restore_refuses_source_or_nonempty_targets[source]",
+      "passed": true
+    },
+    {
+      "test": "tests.test_backup_recovery.test_restore_refuses_source_or_nonempty_targets[nonempty]",
+      "passed": true
+    },
+    {
+      "test": "tests.test_backup_recovery.test_restore_refuses_source_or_nonempty_targets[database]",
+      "passed": true
+    },
+    {
+      "test": "tests.test_backup_recovery.test_missing_reference_and_unsafe_archive_fail_before_overwriting",
+      "passed": true
+    },
+    {
+      "test": "tests.test_backup_recovery.test_monitor_reports_backup_failure_and_age",
+      "passed": true
+    },
+    {
+      "test": "tests.test_backup_recovery.test_monitor_reports_task_metrics_through_the_coordinator",
+      "passed": true
+    },
+    {
+      "test": "tests.test_backup_recovery.test_s3_backup_keeps_independent_copy_and_restore_uses_new_version",
+      "passed": true
+    },
+    {
+      "test": "tests.test_backup_recovery.test_s3_backup_rejects_missing_or_changed_confirmed_content",
+      "passed": true
+    },
+    {
+      "test": "tests.test_backup_recovery.test_restore_remaps_s3_version_with_real_psql",
+      "passed": true
+    },
+    {
+      "test": "tests.test_backup_recovery.test_monitor_checks_idle_coordinator_health[running-healthy-1]",
+      "passed": true
+    },
+    {
+      "test": "tests.test_backup_recovery.test_monitor_checks_idle_coordinator_health[exited--0]",
+      "passed": true
+    },
+    {
+      "test": "tests.test_backup_recovery.test_monitor_checks_idle_coordinator_health[running-unhealthy-0]",
+      "passed": true
+    },
+    {
+      "test": "tests.test_recovery_round_trip.test_real_export_restores_login_business_data_pdf_and_mcp",
+      "passed": true
+    },
+    {
+      "test": "tests.test_request_logging.test_concurrent_requests_correlate_operations_without_logging_secrets",
+      "passed": true
+    },
+    {
+      "test": "tests.test_request_logging.test_unhandled_failure_has_safe_trace_and_response_id",
+      "passed": true
+    },
+    {
+      "test": "tests.test_request_logging.test_legacy_arguments_and_exception_messages_are_never_formatted",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index_concurrency.test_late_pdf_cannot_publish_invalid_version[replace]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index_concurrency.test_late_pdf_cannot_publish_invalid_version[delete]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index_concurrency.test_late_pdf_cannot_publish_invalid_version[rename]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index_concurrency.test_submission_waits_for_file_lock_then_rechecks",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index_concurrency.test_lease_expiring_during_index_write_rolls_back_the_entire_result",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index_concurrency.test_storage_read_does_not_hold_connection",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_storage_lifecycle.test_migration_preserves_versions_search_and_sources",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_storage_lifecycle.test_migration_reuses_a_put_not_recorded_before_interruption",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_storage_lifecycle.test_migration_reports_corrupt_source_without_switching_reference",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_storage_lifecycle.test_cleanup_retries_storage_failure_and_commit_interruption[False]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_storage_lifecycle.test_cleanup_retries_storage_failure_and_commit_interruption[True]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_storage_lifecycle.test_cleanup_waits_for_a_recent_download_of_a_historical_version",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_storage_lifecycle.test_abandoned_upload_and_delete_markers_are_cleaned",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_storage_lifecycle.test_replayed_put_is_removed_while_confirmed_version_and_neighbor_survive",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_storage_lifecycle.test_confirmation_rechecks_after_cleanup_claimed_during_verification",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_storage_lifecycle.test_local_migration_source_cleanup_keeps_s3_content",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_storage_lifecycle.test_internal_import_uses_owner_confirmation_deduplication_and_pause",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_storage_lifecycle.test_backup_inventory_after_cleanup_keeps_current_content_and_old_backup",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_storage_lifecycle.test_web_and_telegram_trigger_only_the_versioned_account_workflow",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_storage_lifecycle.test_restore_discards_source_cleanup_targets_without_losing_identity",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_records.test_revision_keeps_identity_bytes_and_name_independent",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_records.test_frozen_put_and_late_upload",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_records.test_interrupted_put_reuses_only_identical_bytes",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_records.test_empty_directories_move_delete_and_path_boundaries",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_records.test_other_user_and_wrong_file_version_are_rejected",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_records.test_failed_storage_does_not_change_current_version",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_records.test_import_is_repeatable_links_index_and_keeps_sources",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_records.test_import_reports_conflicts_and_missing_indexed_sources",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_records.test_http_version_upload_download_and_old_url_freeze",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_records.test_http_empty_folder_move_delete_and_sync_cutover",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_index_and_search_formats[lecture.pdf-None-quantum]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_index_and_search_formats[notes.md-# quantum mechanics-quantum]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_index_and_search_formats[notes.txt-quantum mechanics-quantum]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_index_and_search_formats[notes.typ-quantum mechanics-quantum]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_index_and_search_formats[notes.ipynb-{\"cells\": [{\"source\": [\"quantum\", \" mechanics\"]}]}-quantum]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_search_tracks_rename_and_hides_replaced_or_deleted_version",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_failed_pdf_and_missing_object_do_not_clear_other_indexes",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_index_and_search_are_user_scoped",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_empty_short_query_unsupported_and_nuls",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_single_file_reads_only_its_version_and_skips_duplicate",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_single_file_permanent_errors_are_explicit[broken.pdf-not a pdf-invalid_pdf]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_single_file_permanent_errors_are_explicit[broken.ipynb-{not json-invalid_notebook]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_single_file_permanent_errors_are_explicit[image.png-image-unsupported_format]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_single_file_rejects_incomplete_upload_and_wrong_identity",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_same_content_revision_advances_index_reference",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_pipeline_change_reprocesses_unchanged_content",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_failed_revision_keeps_old_index_hidden",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_single_file_infrastructure_error_classification[missing-content_missing-False]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_single_file_infrastructure_error_classification[storage-storage_unavailable-True]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_single_file_infrastructure_error_classification[database-database_unavailable-True]",
+      "passed": true
+    },
+    {
+      "test": "tests.services.test_file_index.test_valid_empty_pdf_is_distinct_from_failed_extraction",
+      "passed": true
+    },
+    {
+      "test": "tests.test_db_compose.test_runtime_does_not_receive_maintenance_credentials[True]",
+      "passed": true
+    },
+    {
+      "test": "tests.test_db_compose.test_runtime_does_not_receive_maintenance_credentials[False]",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_compose.test_production_uses_only_pinned_images_and_keeps_credentials_separate",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_production_deploy_records_a_verified_pair_after_database_preparation",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_failed_release_preserves_success_records_and_restores_pair_after_switch[pull]",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_failed_release_preserves_success_records_and_restores_pair_after_switch[up]",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_failed_release_preserves_success_records_and_restores_pair_after_switch[ready]",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_failed_release_preserves_success_records_and_restores_pair_after_switch[smoke]",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_failed_release_preserves_success_records_and_restores_pair_after_switch[images]",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_manual_rollback_uses_previous_pair_without_migrations",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_failed_first_release_does_not_become_current",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_failed_rollback_reports_unrecovered_service",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_mutable_image_reference_is_rejected_before_docker",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_missing_data_mount_stops_before_docker",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_concurrent_deploy_is_rejected",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_repeated_release_preserves_previous_pair_for_manual_rollback",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_same_images_preserve_previous_despite_manifest_format_or_commit_change",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_same_images_with_changed_compose_keep_previous_configuration",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_repeated_first_release_does_not_create_a_self_rollback_target",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_interrupted_promotion_restores_both_records_and_running_pair[deploy-failed-current-update]",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_interrupted_promotion_restores_both_records_and_running_pair[deploy-terminated-after-current-update]",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_interrupted_promotion_restores_both_records_and_running_pair[rollback-failed-current-update]",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_interrupted_promotion_restores_both_records_and_running_pair[rollback-terminated-after-current-update]",
+      "passed": true
+    },
+    {
+      "test": "tests.test_prod_deploy.test_interrupted_first_promotion_leaves_no_success_records",
+      "passed": true
+    }
+  ]
+}

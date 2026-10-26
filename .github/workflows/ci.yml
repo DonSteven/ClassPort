@@ -37,6 +37,8 @@ jobs:
   backend:
     name: Backend (ruff + pytest + docker build)
     runs-on: ubuntu-latest
+    env:
+      PROCESS_LOG_DIR: ${{ github.workspace }}/test-results/processes
     steps:
       - uses: actions/checkout@v4
         with:
@@ -59,7 +61,14 @@ jobs:
       - name: Ruff lint
         run: uv run --no-sync ruff check app/ tests/ scripts/
       - name: Backend tests
-        run: uv run --no-sync pytest
+        run: uv run --no-sync pytest --junitxml=test-results/pytest.xml
+      - name: Retain test results and process logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-tests
+          path: test-results/
+          retention-days: 14
       - name: Validate Compose
         run: |
           docker compose -f docker-compose.yml --env-file .env.docker --profile local-db --profile maintenance config -q

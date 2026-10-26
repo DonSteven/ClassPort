@@ -206,3 +206,52 @@ async def test_api_completion_and_jobs_are_scoped_to_authenticated_user(client):
     assert first == (await client.post(complete)).json()
     assert (await client.get(f"/api/jobs/{first['job_id']}")).json()["status"] == "queued"
     assert len((await client.get("/api/jobs", params={"file_id": target["file_id"]})).json()) == 1
+
+
+async def test_metrics_exclude_retention_backoff_and_historical_retries(client):
+    from app.job_coordination import metrics
+    old = await files.upload(USER, 'old.txt', b'old retry history')
+    await db.execute("UPDATE jobs SET created_at=clock_timestamp()-interval '7 days', next_run_at=clock_timestamp()-interval '10 seconds', attempt_count=3 WHERE id=%s", old['job_id'])
+    for number in range(1, 4):
+        await db.execute("""INSERT INTO job_attempts(user_id,job_id,attempt_no,execution_id,worker_id,status,started_at,finished_at)
+            VALUES (%s,%s,%s,%s,'history','failed',clock_timestamp()-interval '2 hours',clock_timestamp()-interval '1 hour')""",
+            USER, old['job_id'], number, uuid4())
+    future = await files.upload(USER, 'future.txt', b'future backoff')
+    await db.execute("UPDATE jobs SET next_run_at=clock_timestamp()+interval '1 day' WHERE id=%s", future['job_id'])
+    measured = await metrics()
+    assert 9 <= measured['JobWaitingAgeSeconds'] < 15
+    assert measured['JobWaitingCount'] == 1
+    assert measured['JobRetries'] == 0
+    assert measured['JobProcessingSamples'] == 0
+    await db.execute("""INSERT INTO job_attempts(user_id,job_id,attempt_no,execution_id,worker_id)
+        VALUES (%s,%s,4,%s,'new-retry')""", USER, old['job_id'], uuid4())
+    assert (await metrics())['JobRetries'] == 1
+
+
+async def test_metrics_split_cleanup_and_exclude_deferred_or_expired_processing(client):
+    from app.job_coordination import metrics
+    from app.services import storage_cleanup
+    from app.storage.base import ObjectRef
+    uploaded = await files.upload(USER, 'notes.txt', b'quantum mechanics')
+    await jobs.run(uploaded['job_id'], 'index-worker')
+    await db.execute("""UPDATE job_attempts SET started_at=clock_timestamp()-interval '4 seconds',
+        finished_at=clock_timestamp()-interval '2 seconds' WHERE job_id=%s""", uploaded['job_id'])
+    version = await files.get_version(USER, uploaded['file_id'], uploaded['version_id'])
+    async with db.db() as conn:
+        now = (await (await conn.execute('SELECT clock_timestamp() AS now')).fetchone())['now']
+        await storage_cleanup.enqueue(conn, version, ObjectRef(version['object_key']), 'content', now)
+    cleanup_id = await db.fetchval("SELECT id FROM jobs WHERE job_type='storage_cleanup'")
+    for number, status in enumerate(('cancelled', 'expired', 'succeeded'), 1):
+        await db.execute("""INSERT INTO job_attempts(user_id,job_id,attempt_no,execution_id,worker_id,status,started_at,finished_at)
+            VALUES (%s,%s,%s,%s,'cleanup',%s,clock_timestamp()-interval '110 seconds',clock_timestamp()-interval '10 seconds')""",
+            USER, cleanup_id, number, uuid4(), status)
+    measured = await metrics()
+    assert measured['IndexJobProcessingSamples'] == 1
+    assert measured['IndexJobProcessingP50Seconds'] == pytest.approx(2, abs=0.05)
+    assert measured['IndexJobProcessingP95Seconds'] == pytest.approx(2, abs=0.05)
+    assert measured['CleanupJobProcessingSamples'] == 1
+    assert measured['CleanupJobProcessingSeconds'] == pytest.approx(100, abs=0.05)
+    assert measured['CleanupJobExpiredAttempts'] == 1
+    # Attempt 2 followed a normal deferral; only attempt 3 followed an interrupted execution.
+    assert measured['CleanupJobRetries'] == 1 and measured['IndexJobRetries'] == 0
+    assert measured['JobCompletedCount'] == 1

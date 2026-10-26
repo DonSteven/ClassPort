@@ -93,46 +93,47 @@ async def index_file(user_id: UUID, file_id: UUID, version_id: UUID, *,
             from .file_records import protect_read
             from ..storage_config import upload_grace_seconds
             await protect_read(user_id, file_id, version_id, upload_grace_seconds(), source=source)
-            with operation("index.read"):
+            with operation("index.read", file_size=source["size"], storage_backend=source["storage_backend"]):
                 data = await get_storage(source["storage_backend"]).read(
                     ObjectRef(source["object_key"], source["object_version"]),
                 )
-            with operation("index.extract"):
+            with operation("index.extract", file_size=source["size"], storage_backend=source["storage_backend"]):
                 text = await asyncio.to_thread(_extract_text, source["logical_path"], data)
 
-        async with db.db() as conn, conn.transaction():
-            current = await (await conn.execute(
-                """SELECT current_version_id, deleted_at, course_code FROM files
-                   WHERE user_id = %s AND id = %s FOR UPDATE""", (user_id, file_id),
-            )).fetchone()
-            if job is not None and not await jobs.lock_execution(conn, job):
-                return {**result, "status": "discarded", "reason": "execution_expired"}
-            if current is None or current["deleted_at"] is not None:
-                if job is not None:
-                    await jobs.finish(conn, job, "cancelled", "file_deleted", "File was deleted")
-                return {**result, "status": "discarded", "reason": "file_deleted"}
-            if current["current_version_id"] != str(version_id):
-                if job is not None:
-                    await jobs.finish(conn, job, "cancelled", "version_changed", "A newer version is current")
-                return {**result, "status": "discarded", "reason": "version_changed"}
-            if already_indexed:
+        with operation("index.publish"):
+            async with db.db() as conn, conn.transaction():
+                current = await (await conn.execute(
+                    """SELECT current_version_id, deleted_at, course_code FROM files
+                       WHERE user_id = %s AND id = %s FOR UPDATE""", (user_id, file_id),
+                )).fetchone()
+                if job is not None and not await jobs.lock_execution(conn, job):
+                    return {**result, "status": "discarded", "reason": "execution_expired"}
+                if current is None or current["deleted_at"] is not None:
+                    if job is not None:
+                        await jobs.finish(conn, job, "cancelled", "file_deleted", "File was deleted")
+                    return {**result, "status": "discarded", "reason": "file_deleted"}
+                if current["current_version_id"] != str(version_id):
+                    if job is not None:
+                        await jobs.finish(conn, job, "cancelled", "version_changed", "A newer version is current")
+                    return {**result, "status": "discarded", "reason": "version_changed"}
+                if already_indexed:
+                    if job is not None:
+                        await jobs.finish(conn, job, "succeeded")
+                    return {**result, "status": "skipped"}
+                await conn.execute(
+                    """INSERT INTO file_index(user_id, path, file_id, file_version_id,
+                           course_code, size, sha256, text_content, pipeline_version, indexed_at)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                       ON CONFLICT (user_id, file_id)
+                       DO UPDATE SET file_version_id = EXCLUDED.file_version_id,
+                         course_code = EXCLUDED.course_code, size = EXCLUDED.size,
+                         sha256 = EXCLUDED.sha256, text_content = EXCLUDED.text_content,
+                         pipeline_version = EXCLUDED.pipeline_version, indexed_at = EXCLUDED.indexed_at""",
+                    (user_id, f"{user_id}/{file_id}", file_id, version_id, current["course_code"],
+                     source["size"], source["sha256"], text.replace("\x00", ""), PIPELINE_VERSION),
+                )
                 if job is not None:
                     await jobs.finish(conn, job, "succeeded")
-                return {**result, "status": "skipped"}
-            await conn.execute(
-                """INSERT INTO file_index(user_id, path, file_id, file_version_id,
-                       course_code, size, sha256, text_content, pipeline_version, indexed_at)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, now())
-                   ON CONFLICT (user_id, file_id)
-                   DO UPDATE SET file_version_id = EXCLUDED.file_version_id,
-                     course_code = EXCLUDED.course_code, size = EXCLUDED.size,
-                     sha256 = EXCLUDED.sha256, text_content = EXCLUDED.text_content,
-                     pipeline_version = EXCLUDED.pipeline_version, indexed_at = EXCLUDED.indexed_at""",
-                (user_id, f"{user_id}/{file_id}", file_id, version_id, current["course_code"],
-                 source["size"], source["sha256"], text.replace("\x00", ""), PIPELINE_VERSION),
-            )
-            if job is not None:
-                await jobs.finish(conn, job, "succeeded")
         return {**result, "status": "indexed"}
     except jobs.ExecutionExpired:
         return {**result, "status": "discarded", "reason": "execution_expired"}

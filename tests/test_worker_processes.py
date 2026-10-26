@@ -4,8 +4,6 @@ from contextlib import contextmanager
 import os
 from pathlib import Path
 import signal
-import subprocess
-import sys
 import time
 from uuid import uuid4
 
@@ -20,27 +18,32 @@ from redis import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError, TimeoutError as RedisTimeoutError
 from testcontainers.core.container import DockerContainer
 
+from tests.processes import running_process, unused_port
+
 from app import db
 from app.services import file_records as files, jobs, file_index
 
-ROOT = Path(__file__).resolve().parents[1]
+@pytest.fixture(scope="module")
+def broker_container():
+    with DockerContainer("redis:7.4-alpine").with_bind_ports(6379, ("127.0.0.1", unused_port())) as redis:
+        yield redis
 
 
 @pytest.fixture(scope="module")
-def broker():
-    with DockerContainer("redis:7.4-alpine").with_bind_ports(6379, ("127.0.0.1", None)) as redis:
-        url = f"redis://{redis.get_container_host_ip()}:{redis.get_exposed_port(6379)}/0"
-        with Redis.from_url(url, socket_connect_timeout=1, socket_timeout=1) as client:
-            deadline = time.monotonic() + 10
-            while True:
-                try:
-                    assert client.ping()
-                    break
-                except (RedisConnectionError, RedisTimeoutError):
-                    if time.monotonic() >= deadline:
-                        raise
-                    time.sleep(0.1)
-        yield url
+def broker(broker_container):
+    redis = broker_container
+    url = f"redis://{redis.get_container_host_ip()}:{redis.get_exposed_port(6379)}/0"
+    with Redis.from_url(url, socket_connect_timeout=1, socket_timeout=1) as client:
+        deadline = time.monotonic() + 10
+        while True:
+            try:
+                assert client.ping()
+                break
+            except (RedisConnectionError, RedisTimeoutError):
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.1)
+    yield url
 
 
 @pytest.fixture(scope="module")
@@ -51,6 +54,7 @@ def roles(pg_url):
             conn.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD 'test-only' NOSUPERUSER NOCREATEDB NOCREATEROLE").format(sql.Identifier(name)))
             conn.execute(sql.SQL("GRANT USAGE ON SCHEMA public TO {}").format(sql.Identifier(name)))
         conn.execute(sql.SQL("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {}").format(sql.Identifier(names[0])))
+        conn.execute(sql.SQL("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {}").format(sql.Identifier(names[0])))
         conn.execute(sql.SQL("REVOKE ALL ON public._migrations FROM {}").format(sql.Identifier(names[0])))
         conn.execute(sql.SQL("GRANT SELECT, INSERT, UPDATE ON jobs, job_attempts, outbox TO {}").format(sql.Identifier(names[1])))
         for table, in conn.execute("SELECT tablename FROM pg_tables WHERE schemaname='public' AND rowsecurity"):
@@ -77,37 +81,12 @@ async def environment(pg_url, roles, broker, tmp_path, monkeypatch):
         processes = []
 
         @contextmanager
-        def process(mode, *, once=False):
-            env = {"PATH": os.environ["PATH"], "PYTHONPATH": str(ROOT),
-                   "DATABASE_URL": roles["worker" if mode == "worker" else "coordinator"],
-                   "CELERY_BROKER_URL": broker, "STUDY_ROOT": str(tmp_path),
-                   "DB_POOL_MIN_SIZE": "1", "DB_POOL_MAX_SIZE": "2"}
-            # No .env file or SESSION_SECRET exists in this process's directory.
-            command = ([sys.executable, "-m", "celery", "-A", "app.celery_app:celery", "worker",
-                        "--pool=prefork", "--concurrency=1", "--without-gossip", "--without-mingle"]
-                       if mode == "worker" else [sys.executable, "-m", "app.job_coordination", mode,
-                                                  *(["--once"] if once else [])])
-            with (tmp_path / f"{mode}-{uuid4().hex}.log").open("w+") as output:
-                proc = subprocess.Popen(command, env=env, cwd=tmp_path, stdout=output,
-                                        stderr=subprocess.STDOUT, start_new_session=True)
-                processes.append(proc)
-                failed = False
-                try:
-                    yield proc
-                except BaseException:
-                    failed = True
-                    raise
-                finally:
-                    if proc.poll() is None:
-                        os.killpg(proc.pid, signal.SIGTERM)
-                        try:
-                            proc.wait(timeout=10)
-                        except subprocess.TimeoutExpired:
-                            os.killpg(proc.pid, signal.SIGKILL)
-                            proc.wait(timeout=5)
-                    output.seek(0)
-                    if failed or proc.returncode not in (0, -signal.SIGKILL, -signal.SIGTERM):
-                        print(f"{mode} exited {proc.returncode}; log: {output.name}\n{output.read()[-6000:]}")
+        def process(mode, *, once=False, settings=None, port=None):
+            with running_process(mode, database_url=roles["worker" if mode in ("worker", "api") else "coordinator"],
+                                 broker_url=broker, study_root=tmp_path, once=once,
+                                 settings=settings, port=port) as child:
+                processes.append(child)
+                yield child
 
         try:
             yield user, process
@@ -237,3 +216,240 @@ async def test_coordinator_credentials_cannot_read_content_credentials_or_create
                       "SELECT * FROM files", "CREATE TABLE unwanted_worker_table(id int)"):
             with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
                 conn.execute(query)
+
+
+async def wait_api(client, child):
+    import httpx
+    async with asyncio.timeout(20):
+        while True:
+            assert child.poll() is None, 'API exited before readiness'
+            try:
+                if (await client.get('/api/health/ready')).status_code == 200:
+                    return
+            except httpx.HTTPError:
+                pass
+            await asyncio.sleep(0.1)
+
+
+@pytest_asyncio.fixture
+async def api(environment):
+    from argon2 import PasswordHasher
+    import httpx
+    from tests.processes import unused_port
+    user, process = environment
+    await db.execute('UPDATE users SET password_hash=%s WHERE id=%s', PasswordHasher().hash('process-password'), user)
+    port = unused_port()
+    with process('api', port=port, settings={'SESSION_SECRET': 'process-test-session'}) as child:
+        async with httpx.AsyncClient(base_url=f'http://127.0.0.1:{port}', timeout=15) as client:
+            await wait_api(client, child)
+            login = await client.post('/api/auth/login', json={'email': f'{user}@test', 'password': 'process-password'})
+            login.raise_for_status()
+            client.headers['Cookie'] = 'study_session=' + login.cookies['study_session']
+            yield client, child, port
+
+
+async def api_upload(client, path, content):
+    response = await client.post('/api/files/upload-url', json={'path': path})
+    response.raise_for_status()
+    target = response.json()
+    (await client.put(target['url'], content=content)).raise_for_status()
+    response = await client.post(f"/api/files/{target['file_id']}/versions/{target['version_id']}/complete")
+    response.raise_for_status()
+    return response.json()
+
+
+async def test_api_accepts_while_redis_is_down_then_processes(environment, api, broker_container):
+    user, process = environment
+    client, _, _ = api
+    container = broker_container.get_wrapped_container()
+    await asyncio.to_thread(container.stop)
+    try:
+        with process('dispatch'):
+            uploaded = await api_upload(client, 'offline.txt', b'quantum offline notification')
+            assert uploaded['job_status'] == 'queued'
+            assert (await client.get('/api/health/ready')).status_code == 200
+            assert await db.fetchval("SELECT count(*) FROM outbox WHERE job_id=%s AND status='pending'", uploaded['job_id']) == 1
+    finally:
+        await asyncio.to_thread(container.start)
+    with process('dispatch'), process('worker'):
+        await wait_status(user, uploaded['job_id'])
+    assert len(await file_index.search(user, 'quantum')) == 1
+
+
+@pytest.mark.parametrize('committed', [False, True])
+async def test_api_termination_around_commit_preserves_acceptance(environment, api, pg_url, committed):
+    import httpx
+    user, process = environment
+    client, child, port = api
+    target_response = await client.post('/api/files/upload-url', json={'path': 'interrupted.txt'})
+    target_response.raise_for_status()
+    target = target_response.json()
+    (await client.put(target['url'], content=b'quantum interrupted upload')).raise_for_status()
+    completion = f"/api/files/{target['file_id']}/versions/{target['version_id']}/complete"
+    table = 'events' if committed else 'outbox'
+    with psycopg.connect(pg_url, autocommit=True) as guard:
+        guard.execute('SELECT pg_advisory_lock(7901326)')
+        guard.execute(sql.SQL("""CREATE FUNCTION test_pause_completion() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN IF NEW.user_id={}::uuid THEN PERFORM pg_advisory_xact_lock(7901326); END IF;
+            RETURN NEW; END $$""").format(sql.Literal(str(user))))
+        guard.execute(sql.SQL('CREATE TRIGGER test_pause_completion BEFORE INSERT ON {} FOR EACH ROW EXECUTE FUNCTION test_pause_completion()').format(sql.Identifier(table)))
+        request = asyncio.create_task(client.post(completion))
+        try:
+            async with asyncio.timeout(10):
+                while not await db.fetchval('SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE %s=ANY(pg_blocking_pids(pid)))', guard.info.backend_pid):
+                    assert not request.done(), 'completion returned before the commit boundary was observed'
+                    await asyncio.sleep(0.05)
+            assert await db.fetchval('SELECT count(*) FROM jobs WHERE file_id=%s', target['file_id']) == int(committed)
+            os.killpg(child.pid, signal.SIGKILL)
+            await asyncio.to_thread(child.wait, 5)
+            with pytest.raises(httpx.HTTPError):
+                await request
+        finally:
+            guard.execute('SELECT pg_advisory_unlock(7901326)')
+            guard.execute(sql.SQL('DROP TRIGGER test_pause_completion ON {}').format(sql.Identifier(table)))
+            guard.execute('DROP FUNCTION test_pause_completion()')
+            if not request.done():
+                request.cancel()
+                await asyncio.gather(request, return_exceptions=True)
+    with process('api', port=port, settings={'SESSION_SECRET': 'process-test-session'}) as replacement:
+        await wait_api(client, replacement)
+        response = await client.post(completion)
+        response.raise_for_status()
+        job_id = response.json()['job_id']
+        assert await db.fetchval('SELECT count(*) FROM jobs WHERE file_id=%s', target['file_id']) == 1
+        assert await db.fetchval('SELECT count(*) FROM outbox WHERE job_id=%s', job_id) == 1
+        with process('dispatch'), process('worker'):
+            await wait_status(user, job_id)
+        assert len(await file_index.search(user, 'quantum')) == 1
+
+
+async def test_hard_timeout_and_natural_lease_recovery_use_shared_settings(environment, pg_url):
+    user, process = environment
+    settings = {'JOB_TIME_LIMIT': '2', 'JOB_MAX_ATTEMPTS': '2', 'JOB_REDELIVERY_SECONDS': '3'}
+    uploaded = await files.upload(user, 'timeout.txt', b'quantum timeout recovery')
+    with process('dispatch', settings=settings), process('worker', settings=settings), process('recover', settings=settings):
+        async with await psycopg.AsyncConnection.connect(pg_url) as locked:
+            await locked.execute('SELECT id FROM files WHERE id=%s FOR UPDATE', (uploaded['file_id'],))
+            await wait_status(user, uploaded['job_id'], 'running')
+            first = await db.fetchrow('SELECT * FROM jobs WHERE id=%s', uploaded['job_id'])
+            assert 31 < (first['lease_until']-first['started_at']).total_seconds() < 33
+            worker = await db.fetchval('SELECT worker_id FROM job_attempts WHERE job_id=%s', uploaded['job_id'])
+            pid = int(worker.rsplit(':', 1)[1])
+            async with asyncio.timeout(10):
+                while True:
+                    try:
+                        os.kill(pid, 0)
+                    except ProcessLookupError:
+                        break
+                    await asyncio.sleep(0.1)
+        # Let the database lease expire naturally; no test writes to lease_until.
+        async with asyncio.timeout(50):
+            while (await jobs.get(user, uploaded['job_id']))['status'] != 'succeeded':
+                assert (await jobs.get(user, uploaded['job_id']))['status'] != 'failed'
+                await asyncio.sleep(0.2)
+    assert (await jobs.get(user, uploaded['job_id']))['attempt_count'] == 2
+    assert await db.fetchval("SELECT status FROM job_attempts WHERE job_id=%s AND attempt_no=1", uploaded['job_id']) == 'expired'
+
+
+async def test_recovery_uses_nondefault_attempt_budget(environment, pg_url):
+    user, process = environment
+    uploaded = await files.upload(user, 'budget.txt', b'quantum budget')
+    # A real worker claims the job, then loses its process while blocked on this file.
+    async with await psycopg.AsyncConnection.connect(pg_url) as locked:
+        await locked.execute('SELECT id FROM files WHERE id=%s FOR UPDATE', (uploaded['file_id'],))
+        await coordinate(process, 'dispatch')
+        with process('worker', settings={'JOB_MAX_ATTEMPTS': '1'}) as child:
+            await wait_status(user, uploaded['job_id'], 'running')
+            os.killpg(child.pid, signal.SIGKILL)
+            await asyncio.to_thread(child.wait, 5)
+        await db.execute("UPDATE jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE id=%s", uploaded['job_id'])
+        with process('recover', once=True, settings={'JOB_MAX_ATTEMPTS': '1'}) as child:
+            assert await asyncio.to_thread(child.wait, 15) == 0
+    assert (await jobs.get(user, uploaded['job_id']))['status'] == 'failed'
+
+
+async def test_two_users_rest_mcp_and_workers_share_no_content(environment, api):
+    from argon2 import PasswordHasher
+    import httpx
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamablehttp_client
+    user, process = environment
+    client, _, _ = api
+    other = uuid4()
+    client_id = 'process-' + uuid4().hex
+    tokens = [uuid4().hex, uuid4().hex]
+    await db.execute('INSERT INTO users(id,email,password_hash) VALUES (%s,%s,%s)', other, f'{other}@test', PasswordHasher().hash('other-password'))
+    await db.execute("INSERT INTO oauth_clients(client_id,client_name,redirect_uris,token_endpoint_auth_method) VALUES (%s,'Process test',ARRAY['http://127.0.0.1/callback'],'none')", client_id)
+    for owner, token in zip((user, other), tokens):
+        await db.execute("INSERT INTO oauth_tokens(user_id,token,client_id,scope,expires_at) VALUES (%s,%s,%s,'mcp',clock_timestamp()+interval '1 hour')", owner, token, client_id)
+    try:
+        async with httpx.AsyncClient(base_url=client.base_url, timeout=15) as second:
+            login = await second.post('/api/auth/login', json={'email': f'{other}@test', 'password': 'other-password'})
+            login.raise_for_status()
+            second.headers['Cookie'] = 'study_session=' + login.cookies['study_session']
+            with process('dispatch'), process('worker'):
+                first_upload, second_upload = await asyncio.gather(
+                    api_upload(client, 'lecture.txt', b'quantum owneralpha'),
+                    api_upload(second, 'lecture.txt', b'relativity ownerbeta'))
+                await asyncio.gather(wait_status(user, first_upload['job_id']), wait_status(other, second_upload['job_id']))
+            for caller, foreign in ((client, second_upload), (second, first_upload)):
+                assert (await caller.get('/api/jobs/' + foreign['job_id'])).status_code == 404
+                assert (await caller.post('/api/jobs/' + foreign['job_id'] + '/retry')).status_code == 404
+                assert (await caller.get('/api/files/raw', params={'file_id': foreign['file_id'], 'version_id': foreign['version_id']})).status_code == 404
+            assert (await client.get('/api/files/search', params={'q': 'relativity'})).json() == []
+            assert (await second.get('/api/files/search', params={'q': 'quantum'})).json() == []
+            async def read(token):
+                async with streamablehttp_client(str(client.base_url.join('/mcp')), headers={'Authorization': 'Bearer ' + token}, timeout=10) as (incoming, outgoing, _):
+                    async with ClientSession(incoming, outgoing) as session:
+                        await session.initialize()
+                        result = await session.call_tool('read_course_file', {'path': 'lecture.txt'})
+                        assert not result.isError
+                        return str(result.content)
+            first_content, second_content = await asyncio.gather(*(read(token) for token in tokens))
+            assert 'owneralpha' in first_content and 'ownerbeta' not in first_content
+            assert 'ownerbeta' in second_content and 'owneralpha' not in second_content
+    finally:
+        await db.execute('DELETE FROM oauth_tokens WHERE client_id=%s', client_id)
+        await db.execute('DELETE FROM oauth_clients WHERE client_id=%s', client_id)
+        await db.execute('DELETE FROM users WHERE id=%s', other)
+
+
+async def test_real_worker_reports_permanent_errors_and_only_publishes_current_files(environment, tmp_path):
+    import json
+    user, process = environment
+    broken = await files.upload(user, 'broken.pdf', b'invalid PDF')
+    old = await files.upload(user, 'lecture.txt', b'oldcontent')
+    current = await files.upload(user, 'lecture.txt', b'quantum currentcontent')
+    await files.move(user, 'lecture.txt', 'renamed.txt')
+    deleted = await files.upload(user, 'deleted.txt', b'deletedcontent')
+    await files.delete(user, ['deleted.txt'])
+    unsupported = await files.upload(user, 'unsupported.txt', b'unsupportedcontent')
+    await db.execute("UPDATE jobs SET pipeline_version='unknown' WHERE id=%s", unsupported['job_id'])
+    with process('dispatch'), process('worker'):
+        await wait_status(user, current['job_id'])
+        await wait_status(user, broken['job_id'], 'failed')
+        await wait_status(user, unsupported['job_id'], 'failed')
+    assert (await jobs.get(user, broken['job_id']))['error_code'] == 'invalid_pdf'
+    assert (await jobs.get(user, broken['job_id']))['can_retry'] is False
+    assert (await jobs.get(user, unsupported['job_id']))['error_code'] == 'unsupported_pipeline'
+    assert (await jobs.get(user, old['job_id']))['status'] == 'cancelled'
+    assert (await jobs.get(user, deleted['job_id']))['status'] == 'cancelled'
+    assert (await file_index.search(user, 'currentcontent'))[0]['path'] == 'renamed.txt'
+    assert await file_index.search(user, 'oldcontent') == []
+    assert await file_index.search(user, 'deletedcontent') == []
+    records = []
+    for path in Path(os.environ.get('PROCESS_LOG_DIR', tmp_path)).glob('worker-*.log'):
+        for line in path.read_text().splitlines():
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if row.get('job_id') == current['job_id']:
+                records.append(row)
+    claimed = next(row for row in records if row['event'] == 'job.claimed')
+    succeeded = [row for row in records if row['event'] == 'job.succeeded']
+    assert claimed['queue_wait_ms'] >= 0
+    assert len(succeeded) == 1 and succeeded[0]['processing_ms'] > 0
+    assert succeeded[0]['end_to_end_ms'] >= succeeded[0]['processing_ms']
+    stages = {row.get('stage') for row in records}
+    assert {'index.read', 'index.extract', 'index.publish'} <= stages

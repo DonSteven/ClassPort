@@ -20,6 +20,8 @@ resource "aws_cloudwatch_metric_alarm" "operations" {
     dispatch_stuck  = { metric = "JobOutboxAgeSeconds", comparison = "GreaterThanThreshold", threshold = 120 }
     recovery_stuck  = { metric = "JobExpiredLeases", comparison = "GreaterThanThreshold", threshold = 0 }
     jobs_unobserved = { metric = "JobMetricsReady", comparison = "LessThanThreshold", threshold = 1 }
+    dispatcher_down = { metric = "JobDispatcherReady", comparison = "LessThanThreshold", threshold = 1 }
+    recovery_down   = { metric = "JobRecoveryReady", comparison = "LessThanThreshold", threshold = 1 }
   }
   alarm_name          = "${var.name}-${each.key}"
   namespace           = "ClassPort/Operations"

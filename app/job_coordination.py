@@ -9,7 +9,7 @@ import signal
 from . import db
 from .job_config import REDELIVERY_SECONDS
 from .logging_config import configure_logging, request_id
-from .services.jobs import _retry_or_fail
+from .services.jobs import _log, _retry_or_fail
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +21,8 @@ async def dispatch_once(publish=None) -> int:
     for _ in range(20):
         async with db.db() as conn, conn.transaction():
             row = await (await conn.execute(
-                """SELECT o.*, j.status AS job_status, j.request_id,
+                """SELECT o.*, j.status AS job_status, j.request_id, j.file_id, j.file_version_id,
+                          j.attempt_count, j.execution_id, j.job_type, j.pipeline_version,
                           j.next_run_at <= clock_timestamp() AS due
                    FROM outbox o JOIN jobs j ON j.user_id = o.user_id AND j.id = o.job_id
                    WHERE o.status = 'pending' AND o.available_at <= clock_timestamp()
@@ -35,13 +36,16 @@ async def dispatch_once(publish=None) -> int:
                 """UPDATE outbox SET status = 'sent', sent_at = clock_timestamp()
                    WHERE user_id = %s AND id = %s""", (row["user_id"], row["id"]),
             )
-            sent += 1
-            token = request_id.set(row["request_id"])
-            try:
-                log.info("job.dispatched", extra={"event": "job.dispatched", "job_id": row["job_id"],
-                                                 "user_id": row["user_id"]})
-            finally:
-                request_id.reset(token)
+        sent += 1
+        token = request_id.set(row["request_id"])
+        try:
+            log.info("job.dispatched", extra={"event": "job.dispatched", "job_id": row["job_id"],
+                                             "user_id": row["user_id"], "file_id": row["file_id"],
+                                             "version_id": row["file_version_id"], "attempt": row["attempt_count"],
+                                             "execution_id": row["execution_id"], "job_type": row["job_type"],
+                                             "pipeline_version": row["pipeline_version"]})
+        finally:
+            request_id.reset(token)
     return sent
 
 
@@ -72,28 +76,55 @@ async def recover_once(*, restored=False) -> dict:
                        AND o.job_id = j.id AND o.created_at > clock_timestamp() - %s * interval '1 second'))
                FOR UPDATE OF j SKIP LOCKED""", (restored, REDELIVERY_SECONDS),
         )
-        return {"expired": len(expired), "redispatched": cursor.rowcount}
+        redispatched = cursor.rowcount
+    for job in expired:
+        _log("job.expired", job, error_code="worker_lost")
+    return {"expired": len(expired), "redispatched": redispatched}
 
 
 async def metrics() -> dict:
-    return await db.fetchrow(
-        """SELECT
-          coalesce((SELECT extract(epoch FROM clock_timestamp()-min(created_at)) FROM jobs
-            WHERE status IN ('queued','retry_wait') AND next_run_at <= clock_timestamp()),0)::float
-            AS "JobWaitingAgeSeconds",
-          coalesce((SELECT extract(epoch FROM clock_timestamp()-min(available_at)) FROM outbox
-            WHERE status='pending' AND available_at <= clock_timestamp()),0)::float AS "JobOutboxAgeSeconds",
-          (SELECT count(*) FROM jobs WHERE status='running' AND lease_until <= clock_timestamp())
-            AS "JobExpiredLeases",
-          coalesce((SELECT avg(extract(epoch FROM finished_at-started_at)) FROM job_attempts
-            WHERE finished_at > clock_timestamp()-interval '15 minutes'),0)::float AS "JobProcessingSeconds",
-          coalesce((SELECT 100.0*count(*) FILTER (WHERE status='failed')/nullif(count(*),0) FROM jobs
-            WHERE status IN ('succeeded','failed') AND finished_at > clock_timestamp()-interval '15 minutes'),0)::float
-            AS "JobFailureRate",
-          coalesce((SELECT sum(greatest(attempt_count-1,0)) FROM jobs
-            WHERE updated_at > clock_timestamp()-interval '15 minutes'),0)::float AS "JobRetries"
-        """,
-    )
+    result = {}
+    for prefix, kind in (("", None), ("Index", "index_file"), ("Cleanup", "storage_cleanup")):
+        row = await db.fetchrow(
+            """WITH scoped_jobs AS (
+              SELECT * FROM jobs WHERE %s::text IS NULL OR job_type = %s
+            ), attempts AS (
+              SELECT a.* FROM job_attempts a JOIN scoped_jobs j ON j.id=a.job_id
+            ), completed AS (
+              SELECT extract(epoch FROM finished_at-started_at)::float AS seconds FROM attempts
+              WHERE status IN ('succeeded','failed') AND finished_at > clock_timestamp()-interval '15 minutes'
+            ) SELECT
+              coalesce((SELECT extract(epoch FROM clock_timestamp()-min(next_run_at)) FROM scoped_jobs
+                WHERE status IN ('queued','retry_wait') AND next_run_at <= clock_timestamp()),0)::float
+                AS "JobWaitingAgeSeconds",
+              coalesce((SELECT extract(epoch FROM clock_timestamp()-min(o.available_at)) FROM outbox o
+                JOIN scoped_jobs j ON j.id=o.job_id
+                WHERE o.status='pending' AND o.available_at <= clock_timestamp()),0)::float AS "JobOutboxAgeSeconds",
+              (SELECT count(*) FROM scoped_jobs WHERE status='running' AND lease_until <= clock_timestamp())
+                AS "JobExpiredLeases",
+              (SELECT count(*) FROM scoped_jobs WHERE status IN ('queued','retry_wait')
+                AND next_run_at <= clock_timestamp()) AS "JobWaitingCount",
+              (SELECT count(*) FROM completed) AS "JobProcessingSamples",
+              coalesce((SELECT avg(seconds) FROM completed),0)::float AS "JobProcessingSeconds",
+              coalesce((SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY seconds) FROM completed),0)::float
+                AS "JobProcessingP50Seconds",
+              coalesce((SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY seconds) FROM completed),0)::float
+                AS "JobProcessingP95Seconds",
+              (SELECT count(*) FROM attempts WHERE status='expired'
+                AND finished_at > clock_timestamp()-interval '15 minutes') AS "JobExpiredAttempts",
+              (SELECT count(*) FROM scoped_jobs WHERE status IN ('succeeded','failed')
+                AND finished_at > clock_timestamp()-interval '15 minutes') AS "JobCompletedCount",
+              coalesce((SELECT 100.0*count(*) FILTER (WHERE status='failed')/nullif(count(*),0) FROM scoped_jobs
+                WHERE status IN ('succeeded','failed') AND finished_at > clock_timestamp()-interval '15 minutes'),0)::float
+                AS "JobFailureRate",
+              (SELECT count(*) FROM attempts a WHERE a.started_at > clock_timestamp()-interval '15 minutes'
+                AND EXISTS (SELECT 1 FROM attempts previous WHERE previous.job_id=a.job_id
+                  AND previous.attempt_no=a.attempt_no-1 AND previous.status IN ('failed','expired')))
+                AS "JobRetries"
+            """, kind, kind,
+        )
+        result.update({prefix + key: value for key, value in row.items()})
+    return result
 
 
 async def main(mode, once=False):

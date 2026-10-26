@@ -37,7 +37,6 @@ async def create(conn, user_id, file_id, version_id) -> dict:
     if row is not None:
         await conn.execute("INSERT INTO outbox(user_id, job_id) VALUES (%s, %s)",
                            (user_id, row["id"]))
-        _log("job.created", row)
     else:
         row = await (await conn.execute(
             """SELECT * FROM jobs WHERE user_id = %s AND file_id = %s
@@ -65,6 +64,8 @@ async def enqueue_user(user_id: UUID) -> dict:
         )).fetchall()
         jobs = [await create(conn, user_id, r["id"], r["current_version_id"])
                 for r in rows if r["logical_path"].lower().endswith(_INDEXABLE_SUFFIXES)]
+    for job in jobs:
+        _log("job.registered", job)
     return {"job_ids": [j["id"] for j in jobs], "total_seen": len(rows),
             "queued": sum(j["status"] in ACTIVE for j in jobs)}
 
@@ -95,7 +96,8 @@ async def claim(job_id: UUID, worker_id: str) -> dict | None:
                VALUES (%s, %s, %s, %s, %s)""",
             (job["user_id"], job["id"], job["attempt_count"], execution_id, worker_id),
         )
-    _log("job.claimed", job, worker_id=worker_id)
+    _log("job.claimed", job, worker_id=worker_id,
+         queue_wait_ms=round(max(0, (job['started_at']-job['next_run_at']).total_seconds()*1000), 2))
     return job
 
 
@@ -130,7 +132,6 @@ async def finish(conn, job, status, code=None, message=None) -> None:
            WHERE user_id = %s AND job_id = %s AND execution_id = %s""",
         (status, code, message, job["user_id"], job["id"], job["execution_id"]),
     )
-    _log("job." + status, job, error_code=code)
 
 
 async def _retry_or_fail(conn, job, code, message, *, retryable, expired=False):
@@ -167,7 +168,6 @@ async def _retry_or_fail(conn, job, code, message, *, retryable, expired=False):
                SELECT user_id, id, next_run_at FROM jobs WHERE user_id = %s AND id = %s""",
             (job["user_id"], job["id"]),
         )
-    _log("job.retry_wait" if retry else "job.failed", job, error_code=code)
 
 
 async def run(job_id: UUID, worker_id: str) -> None:
@@ -180,15 +180,16 @@ async def run(job_id: UUID, worker_id: str) -> None:
     context = job_context.set({"job_id": job["id"], "user_id": job["user_id"],
                               "file_id": job["file_id"], "version_id": job["file_version_id"],
                               "attempt": job["attempt_count"], "execution_id": job["execution_id"],
-                              "worker_id": worker_id})
+                              "worker_id": worker_id, "job_type": job['job_type'],
+                              "pipeline_version": job['pipeline_version']})
     try:
         if job['job_type'] == 'storage_cleanup' and job['pipeline_version'] == '1':
             from . import storage_cleanup
             await storage_cleanup.run(job)
-            return
-        if job["job_type"] != "index_file" or job["pipeline_version"] != PIPELINE_VERSION:
-            raise IndexingError("unsupported_pipeline", "This worker cannot process the requested pipeline")
-        await index_file(job["user_id"], job["file_id"], job["file_version_id"], job=job)
+        else:
+            if job["job_type"] != "index_file" or job["pipeline_version"] != PIPELINE_VERSION:
+                raise IndexingError("unsupported_pipeline", "This worker cannot process the requested pipeline")
+            await index_file(job["user_id"], job["file_id"], job["file_version_id"], job=job)
     except Exception as exc:
         if isinstance(exc, IndexingError):
             code, message, retryable = exc.code, str(exc), exc.retryable
@@ -207,8 +208,23 @@ async def run(job_id: UUID, worker_id: str) -> None:
             if await lock_execution(conn, job):
                 await _retry_or_fail(conn, job, code, message, retryable=retryable)
     finally:
-        job_context.reset(context)
-        request_id.reset(token)
+        try:
+            # Read back the committed attempt: rolled-back writes never produce a success event.
+            outcome = await db.fetchrow(
+                """SELECT a.status, a.error_code, a.finished_at-a.started_at AS processing,
+                          a.finished_at-j.created_at AS elapsed, j.status AS job_status
+                   FROM job_attempts a JOIN jobs j ON j.id=a.job_id
+                   WHERE a.execution_id=%s AND a.status IN ('succeeded','failed','cancelled')""",
+                job['execution_id'],
+            )
+            if outcome:
+                status = 'retry_wait' if outcome['job_status'] == 'retry_wait' else outcome['status']
+                _log('job.' + status, job, error_code=outcome['error_code'],
+                     processing_ms=round(outcome['processing'].total_seconds()*1000, 2),
+                     end_to_end_ms=round(outcome['elapsed'].total_seconds()*1000, 2))
+        finally:
+            job_context.reset(context)
+            request_id.reset(token)
 
 
 def _log(event, job, **extra):
@@ -217,6 +233,7 @@ def _log(event, job, **extra):
         log.info(event, extra={"event": event, "job_id": str(job["id"]),
                  "user_id": str(job["user_id"]), "file_id": str(job["file_id"]),
                  "version_id": str(job["file_version_id"]), "attempt": job["attempt_count"],
+                 "job_type": job['job_type'], "pipeline_version": job['pipeline_version'],
                  "execution_id": str(job["execution_id"]) if job["execution_id"] else None, **extra})
     finally:
         request_id.reset(token)

@@ -464,6 +464,14 @@ def monitor(root, settings):
     attempt = root / "last-backup-attempt.json"
     failed = int(attempt.exists() and json.loads(attempt.read_text())["status"] == "failed")
     job_metrics = {"JobMetricsReady": 0}
+    for service, metric in (("dispatcher", "JobDispatcherReady"), ("job-recovery", "JobRecoveryReady")):
+        job_metrics[metric] = 0
+        try:
+            release = (root / "releases/current").resolve(strict=True)
+            state = json.loads(compose(root, release, "ps", "--all", "--format", "json", service))
+            job_metrics[metric] = int(state.get("State") == "running" and state.get("Health") == "healthy")
+        except Exception:
+            pass
     try:
         release = (root / "releases/current").resolve(strict=True)
         output = compose(root, release, "run", "--rm", "--no-deps", "job-recovery",

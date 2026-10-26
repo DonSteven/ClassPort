@@ -13,7 +13,7 @@ from uuid import uuid4
 
 request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
 job_context: ContextVar[dict] = ContextVar("job_context", default={})
-FIELDS = {"event", "stage", "method", "path", "status", "duration_ms", "error_type", "indexed", "skipped", "failed", "pruned", "total_seen", "user_id", "file_id", "version_id", "error_code", "job_id", "attempt", "execution_id", "worker_id"}
+FIELDS = {"event", "stage", "method", "path", "status", "duration_ms", "error_type", "indexed", "skipped", "failed", "pruned", "total_seen", "user_id", "file_id", "version_id", "error_code", "job_id", "attempt", "execution_id", "worker_id", "job_type", "pipeline_version", "queue_wait_ms", "processing_ms", "end_to_end_ms", "file_size", "storage_backend"}
 log = logging.getLogger("app.operations")
 
 
@@ -47,16 +47,16 @@ def configure_logging():
 
 
 @contextmanager
-def operation(stage):
+def operation(stage, **fields):
     started = perf_counter()
     try:
         yield
     except Exception:
-        log.exception("operation.failed", extra={"event": "operation.failed", "stage": stage,
+        log.exception("operation.failed", extra={**fields, "event": "operation.failed", "stage": stage,
                       "duration_ms": round((perf_counter() - started) * 1000, 2)})
         raise
     else:
-        log.info("operation.completed", extra={"event": "operation.completed", "stage": stage,
+        log.info("operation.completed", extra={**fields, "event": "operation.completed", "stage": stage,
                  "duration_ms": round((perf_counter() - started) * 1000, 2)})
 
 

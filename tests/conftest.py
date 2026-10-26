@@ -53,8 +53,8 @@ def event_loop():
 
 
 @pytest.fixture(scope="session")
-def pg_url() -> str:
-    """Spin up a Postgres testcontainer, apply the baseline schema, return DSN."""
+def pg_container():
+    """Create a migrated disposable database, also available to container-side psql tests."""
     with PostgresContainer(
         "postgres:16-alpine",
         username="classport",
@@ -82,7 +82,12 @@ def pg_url() -> str:
             raise RuntimeError(
                 f"Migration failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
             )
-        yield dsn
+        yield pg
+
+
+@pytest.fixture(scope="session")
+def pg_url(pg_container) -> str:
+    return pg_container.get_connection_url().replace("postgresql+psycopg2://", "postgresql://")
 
 
 class _TxnPool:

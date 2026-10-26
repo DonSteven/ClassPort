@@ -184,7 +184,9 @@ run "operations_and_recovery_are_scoped" {
   }
   assert {
     condition = (
-      length(aws_cloudwatch_metric_alarm.operations) == 8 &&
+      length(aws_cloudwatch_metric_alarm.operations) == 10 &&
+      aws_cloudwatch_metric_alarm.operations["dispatcher_down"].metric_name == "JobDispatcherReady" &&
+      aws_cloudwatch_metric_alarm.operations["recovery_down"].metric_name == "JobRecoveryReady" &&
       aws_cloudwatch_metric_alarm.operations["jobs_waiting"].threshold == 300 &&
       aws_cloudwatch_metric_alarm.operations["dispatch_stuck"].metric_name == "JobOutboxAgeSeconds" &&
       aws_cloudwatch_metric_alarm.operations["recovery_stuck"].metric_name == "JobExpiredLeases" &&

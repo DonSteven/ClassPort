@@ -222,10 +222,9 @@ def test_s3_backup_rejects_missing_or_changed_confirmed_content(host, tmp_path, 
     assert not objects
 
 
-def test_restore_remaps_s3_version_with_real_psql(pg_url, tmp_path, monkeypatch):
+def test_restore_remaps_s3_version_with_real_psql(pg_url, pg_container, tmp_path, monkeypatch):
     """Execute the restore mapping script against a real migrated database."""
     import hashlib
-    import subprocess
     from uuid import uuid4
     import psycopg
 
@@ -246,9 +245,19 @@ def test_restore_remaps_s3_version_with_real_psql(pg_url, tmp_path, monkeypatch)
     monkeypatch.setattr(recovery, "material_aws", lambda *args: {"VersionId": "new-target-version"})
 
     def psql(work, root, config, settings, *args):
-        subprocess.run(["docker", "run", "--rm", "--network", "host", "-v", f"{work}:/backup:ro",
-                        recovery.PG_IMAGE, "psql", pg_url, *args[1:]],
-                       check=True, capture_output=True, text=True, timeout=30)
+        # Execute psql inside this disposable PostgreSQL container. Feed the generated
+        # file through stdin so host/container localhost and mount paths cannot diverge.
+        import subprocess
+        container_id = pg_container.get_wrapped_container().id
+        subprocess.run(['docker', 'exec', container_id, 'mkdir', '-p', '/backup'], check=True)
+        subprocess.run(['docker', 'cp', str(work / 'material-mappings.json'),
+                        container_id + ':/backup/material-mappings.json'], check=True)
+        result = subprocess.run(
+            ["docker", "exec", "-i", pg_container.get_wrapped_container().id,
+             "psql", "-U", "classport", "-d", "classport_test", "-X", "-v", "ON_ERROR_STOP=1"],
+            input=(work / "material-mappings.sql").read_text(), capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0, result.stderr
     monkeypatch.setattr(recovery, "pg", psql)
     try:
         recovery.restore_materials(tmp_path, tmp_path, {}, {"S3_BUCKET": "target", "BACKUP_BUCKET": "backups"}, [record])
@@ -257,3 +266,20 @@ def test_restore_remaps_s3_version_with_real_psql(pg_url, tmp_path, monkeypatch)
     finally:
         with psycopg.connect(pg_url) as connection:
             connection.execute("DELETE FROM files WHERE id=%s", (file_id,))
+
+
+@pytest.mark.parametrize('state,health,expected', [('running', 'healthy', 1), ('exited', '', 0), ('running', 'unhealthy', 0)])
+def test_monitor_checks_idle_coordinator_health(host, monkeypatch, state, health, expected):
+    root, settings, objects, calls = host
+    settings['ENVIRONMENT'] = 'test'
+    monkeypatch.setattr(recovery, 'urlopen', lambda *a, **k: (_ for _ in ()).throw(OSError()))
+    def compose(*args):
+        if 'ps' in args:
+            return json.dumps({'State': state, 'Health': health})
+        return json.dumps({'JobWaitingCount': 0, 'JobExpiredLeases': 0})
+    monkeypatch.setattr(recovery, 'compose', compose)
+    monkeypatch.setattr(recovery, 'aws', lambda *a: calls.append(a))
+    recovery.monitor(root, settings)
+    measured = {item['MetricName']: item['Value'] for item in json.loads(calls[-1][-1])}
+    assert measured['JobMetricsReady'] == 1
+    assert measured['JobDispatcherReady'] == expected and measured['JobRecoveryReady'] == expected

@@ -1,4 +1,5 @@
 """Restore a real PostgreSQL export into another instance and read recovered data."""
+import asyncio
 import importlib.util
 import json
 import os
@@ -15,6 +16,8 @@ import pymupdf
 from testcontainers.postgres import PostgresContainer
 
 from tests.test_backup_recovery import recovery
+from tests.processes import running_process
+from tests.test_worker_processes import broker_container, broker, wait_status  # noqa: F401
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,7 +26,7 @@ bootstrap = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(bootstrap)
 
 
-async def test_real_export_restores_login_business_data_pdf_and_mcp(tmp_path, monkeypatch):
+async def test_real_export_restores_login_business_data_pdf_and_mcp(tmp_path, monkeypatch, broker):  # noqa: F811
     config = {key: "test-only" for key in bootstrap.REQUIRED_KEYS}
     config.update(OPERATOR_EMAIL="operator@example.test", OPERATOR_PASSWORD="operator-password",
                   SMOKE_EMAIL="smoke@example.test", SMOKE_PASSWORD="smoke-password",
@@ -113,11 +116,17 @@ async def test_real_export_restores_login_business_data_pdf_and_mcp(tmp_path, mo
         monkeypatch.setattr(db, "_pool", None)
         await db.init_pool()
         try:
-            from app.job_coordination import recover_once
-            assert (await recover_once(restored=True))["expired"] == 1
-            await db.execute("UPDATE jobs SET next_run_at=clock_timestamp() WHERE id=%s", interrupted["job_id"])
-            await jobs.run(interrupted["job_id"], "restored-host-worker")
-            recovered_job = await jobs.get(bootstrap.OPERATOR_ID, interrupted["job_id"])
+            from redis import Redis
+            assert Redis.from_url(broker).dbsize() == 0
+            settings = {"PGSSLMODE": "disable"}
+            with running_process("restore", database_url=dsn(target, "classport_jobs", config["COORDINATOR_DB_PASSWORD"]),
+                                 broker_url=broker, study_root=recovered, settings=settings, once=True) as child:
+                assert await asyncio.to_thread(child.wait, 15) == 0
+            with running_process("dispatch", database_url=dsn(target, "classport_jobs", config["COORDINATOR_DB_PASSWORD"]),
+                                 broker_url=broker, study_root=recovered, settings=settings), running_process(
+                                     "worker", database_url=dsn(target, "classport_app", config["APP_DB_PASSWORD"]),
+                                     broker_url=broker, study_root=recovered, settings=settings):
+                recovered_job = await wait_status(bootstrap.OPERATOR_ID, interrupted["job_id"])
             assert recovered_job["status"] == "succeeded" and recovered_job["attempt_count"] == 2
             async with AsyncClient(transport=ASGITransport(create_app()), base_url="https://test") as client:
                 login = await client.post("/api/auth/login", json={"email": config["OPERATOR_EMAIL"], "password": config["OPERATOR_PASSWORD"]})

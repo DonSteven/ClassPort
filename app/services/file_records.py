@@ -330,6 +330,7 @@ async def complete_upload(user_id: UUID, file_id: UUID, version_id: UUID,
         job = await (await conn.execute(
             "SELECT * FROM jobs WHERE user_id = %s AND id = %s", (user_id, job["id"]),
         )).fetchone()
+    jobs_svc._log("job.registered", job)
     result = {"path": row["logical_path"], "file_id": str(file_id),
               "version_id": str(version_id), "size": row["size"],
               "content_type": row["content_type"], "job_id": job["id"], "job_status": job["status"]}

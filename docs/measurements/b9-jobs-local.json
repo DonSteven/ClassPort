@@ -1,0 +1,1108 @@
+{
+  "environment": "local PostgreSQL 16 / Redis 7.4 / LocalStorage; no AWS",
+  "measured_at": "2026-10-26T00:34:20.741862+00:00",
+  "python": "3.13.12",
+  "commit": "a0a0ac8b2e18a6cbb1dee2d780107e9b0e0ae863",
+  "working_tree_changed": true,
+  "settings": {
+    "JOB_TIME_LIMIT": "120",
+    "JOB_MAX_ATTEMPTS": "3",
+    "JOB_REDELIVERY_SECONDS": "60"
+  },
+  "workload": {
+    "files_per_run": 6,
+    "text_bytes": 262144,
+    "pdf_bytes": 2430,
+    "pdf_pages": 5
+  },
+  "runs": [
+    {
+      "repeat": 1,
+      "worker_concurrency": 1,
+      "batch_seconds": 2.4699107549968176,
+      "files_per_second": 2.4292375697630137,
+      "failure_count": 0,
+      "retry_count": 0,
+      "queue_seconds": {
+        "samples": 6,
+        "p50": 0.912868,
+        "p95": 1.1757330000000001
+      },
+      "processing_seconds": {
+        "samples": 6,
+        "p50": 0.137508,
+        "p95": 0.33375
+      },
+      "task_seconds": {
+        "samples": 6,
+        "p50": 1.0064825,
+        "p95": 1.24875375
+      },
+      "jobs": [
+        {
+          "id": "bc9ebf27-4540-48fa-b86b-35f46c401d08",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 262144,
+          "content_type": "text/plain",
+          "queue_seconds": 0.308786,
+          "processing_seconds": 0.135985,
+          "task_seconds": 0.444771
+        },
+        {
+          "id": "6500eb21-6d09-4825-a4ae-5e36c97aaa94",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 2430,
+          "content_type": "application/pdf",
+          "queue_seconds": 0.436318,
+          "processing_seconds": 0.387848,
+          "task_seconds": 0.824166
+        },
+        {
+          "id": "9bba9ebe-5f6a-4df6-98b0-3f7c6e08a1dd",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 262144,
+          "content_type": "text/plain",
+          "queue_seconds": 0.842852,
+          "processing_seconds": 0.139031,
+          "task_seconds": 0.981883
+        },
+        {
+          "id": "89715c4a-ed15-4228-b533-8991b020812d",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 2430,
+          "content_type": "application/pdf",
+          "queue_seconds": 0.982884,
+          "processing_seconds": 0.048198,
+          "task_seconds": 1.031082
+        },
+        {
+          "id": "c210ffca-48a3-4a70-9737-5db5aab3c5bd",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 262144,
+          "content_type": "text/plain",
+          "queue_seconds": 1.047252,
+          "processing_seconds": 0.171456,
+          "task_seconds": 1.218708
+        },
+        {
+          "id": "58b45a06-0773-47ee-89b0-1c062f574c45",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 2430,
+          "content_type": "application/pdf",
+          "queue_seconds": 1.21856,
+          "processing_seconds": 0.040209,
+          "task_seconds": 1.258769
+        }
+      ]
+    },
+    {
+      "repeat": 1,
+      "worker_concurrency": 2,
+      "batch_seconds": 3.7139453160052653,
+      "files_per_second": 1.6155326719924956,
+      "failure_count": 0,
+      "retry_count": 0,
+      "queue_seconds": {
+        "samples": 6,
+        "p50": 1.384462,
+        "p95": 1.58910725
+      },
+      "processing_seconds": {
+        "samples": 6,
+        "p50": 0.290303,
+        "p95": 0.64393775
+      },
+      "task_seconds": {
+        "samples": 6,
+        "p50": 1.594367,
+        "p95": 1.83977525
+      },
+      "jobs": [
+        {
+          "id": "ca08cf1d-1cec-4f53-804b-b14f3908d2f2",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 2430,
+          "content_type": "application/pdf",
+          "queue_seconds": 0.774261,
+          "processing_seconds": 0.510818,
+          "task_seconds": 1.285079
+        },
+        {
+          "id": "73026c6d-165d-4d34-a703-bab48a4d56aa",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 262144,
+          "content_type": "text/plain",
+          "queue_seconds": 1.275792,
+          "processing_seconds": 0.211036,
+          "task_seconds": 1.486828
+        },
+        {
+          "id": "3a9e8fb1-5015-456b-924c-3bbfccfcad1c",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 2430,
+          "content_type": "application/pdf",
+          "queue_seconds": 1.533206,
+          "processing_seconds": 0.36957,
+          "task_seconds": 1.902776
+        },
+        {
+          "id": "a2536f2a-ff4e-4266-82f7-a46a759a99d5",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 2430,
+          "content_type": "application/pdf",
+          "queue_seconds": 1.607741,
+          "processing_seconds": 0.043032,
+          "task_seconds": 1.650773
+        },
+        {
+          "id": "75751bf5-e98a-48ce-8259-de6a88aded58",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 262144,
+          "content_type": "text/plain",
+          "queue_seconds": 0.859129,
+          "processing_seconds": 0.688311,
+          "task_seconds": 1.54744
+        },
+        {
+          "id": "f81947b2-f531-4d48-b2f8-1adde48b1d22",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 262144,
+          "content_type": "text/plain",
+          "queue_seconds": 1.493132,
+          "processing_seconds": 0.148162,
+          "task_seconds": 1.641294
+        }
+      ]
+    },
+    {
+      "repeat": 2,
+      "worker_concurrency": 1,
+      "batch_seconds": 4.018710050004302,
+      "files_per_second": 1.493016397138076,
+      "failure_count": 0,
+      "retry_count": 0,
+      "queue_seconds": {
+        "samples": 6,
+        "p50": 1.750295,
+        "p95": 1.9239195
+      },
+      "processing_seconds": {
+        "samples": 6,
+        "p50": 0.098681,
+        "p95": 0.1953495
+      },
+      "task_seconds": {
+        "samples": 6,
+        "p50": 1.813796,
+        "p95": 1.9798755
+      },
+      "jobs": [
+        {
+          "id": "9ca80fc2-7c89-4b1e-b155-db04eeff54e8",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 262144,
+          "content_type": "text/plain",
+          "queue_seconds": 1.835148,
+          "processing_seconds": 0.104148,
+          "task_seconds": 1.939296
+        },
+        {
+          "id": "2d53d7a4-e5a6-418a-a954-0c357923fa06",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 2430,
+          "content_type": "application/pdf",
+          "queue_seconds": 1.95351,
+          "processing_seconds": 0.039892,
+          "task_seconds": 1.993402
+        },
+        {
+          "id": "ec333b94-af1f-44f0-ab57-30fc6fcfe6d5",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 262144,
+          "content_type": "text/plain",
+          "queue_seconds": 1.346134,
+          "processing_seconds": 0.107952,
+          "task_seconds": 1.454086
+        },
+        {
+          "id": "0c955fe1-1b66-44f0-bfaa-5700fd93ca9c",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 2430,
+          "content_type": "application/pdf",
+          "queue_seconds": 1.478424,
+          "processing_seconds": 0.224482,
+          "task_seconds": 1.702906
+        },
+        {
+          "id": "fb07074d-7c6f-4878-b09d-6d59ee366059",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 262144,
+          "content_type": "text/plain",
+          "queue_seconds": 1.707483,
+          "processing_seconds": 0.093214,
+          "task_seconds": 1.800697
+        },
+        {
+          "id": "d5457f71-3c9c-4711-90da-70368d73930e",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 2430,
+          "content_type": "application/pdf",
+          "queue_seconds": 1.793107,
+          "processing_seconds": 0.033788,
+          "task_seconds": 1.826895
+        }
+      ]
+    },
+    {
+      "repeat": 2,
+      "worker_concurrency": 2,
+      "batch_seconds": 3.845926142006647,
+      "files_per_second": 1.5600923622702347,
+      "failure_count": 0,
+      "retry_count": 0,
+      "queue_seconds": {
+        "samples": 6,
+        "p50": 0.548453,
+        "p95": 0.997536
+      },
+      "processing_seconds": {
+        "samples": 6,
+        "p50": 0.1323215,
+        "p95": 0.61157025
+      },
+      "task_seconds": {
+        "samples": 6,
+        "p50": 0.922685,
+        "p95": 1.15593425
+      },
+      "jobs": [
+        {
+          "id": "4299fc5e-0b0d-48c3-ad7f-715f97a266de",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 262144,
+          "content_type": "text/plain",
+          "queue_seconds": 0.347986,
+          "processing_seconds": 0.138112,
+          "task_seconds": 0.486098
+        },
+        {
+          "id": "1ccb86dc-64b4-473a-9612-b44e0f0d7f14",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 262144,
+          "content_type": "text/plain",
+          "queue_seconds": 0.488277,
+          "processing_seconds": 0.11444,
+          "task_seconds": 0.602717
+        },
+        {
+          "id": "d328ca88-7c4a-46a2-a639-bdfa9615c940",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 262144,
+          "content_type": "text/plain",
+          "queue_seconds": 0.608629,
+          "processing_seconds": 0.126531,
+          "task_seconds": 0.73516
+        },
+        {
+          "id": "e2fd5d90-758f-47a7-8608-e8e75cd97d79",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 2430,
+          "content_type": "application/pdf",
+          "queue_seconds": 0.435612,
+          "processing_seconds": 0.674598,
+          "task_seconds": 1.11021
+        },
+        {
+          "id": "98fff516-7524-4a6e-bc91-889b54b36475",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 2430,
+          "content_type": "application/pdf",
+          "queue_seconds": 0.733875,
+          "processing_seconds": 0.422487,
+          "task_seconds": 1.156362
+        },
+        {
+          "id": "8686c9e7-cabd-4db9-9338-b833da65c3da",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 2430,
+          "content_type": "application/pdf",
+          "queue_seconds": 1.085423,
+          "processing_seconds": 0.069228,
+          "task_seconds": 1.154651
+        }
+      ]
+    },
+    {
+      "repeat": 3,
+      "worker_concurrency": 1,
+      "batch_seconds": 5.692851150990464,
+      "files_per_second": 1.0539534305154101,
+      "failure_count": 0,
+      "retry_count": 0,
+      "queue_seconds": {
+        "samples": 6,
+        "p50": 0.5025245,
+        "p95": 2.11665975
+      },
+      "processing_seconds": {
+        "samples": 6,
+        "p50": 0.10893549999999999,
+        "p95": 0.19215625
+      },
+      "task_seconds": {
+        "samples": 6,
+        "p50": 0.5769314999999999,
+        "p95": 2.17327125
+      },
+      "jobs": [
+        {
+          "id": "88137a92-9985-47bc-88d7-1af945a04015",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 262144,
+          "content_type": "text/plain",
+          "queue_seconds": 0.080532,
+          "processing_seconds": 0.140065,
+          "task_seconds": 0.220597
+        },
+        {
+          "id": "6afc1f16-8ade-4296-9130-d9b5ef38af05",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 262144,
+          "content_type": "text/plain",
+          "queue_seconds": 2.049192,
+          "processing_seconds": 0.106761,
+          "task_seconds": 2.155953
+        },
+        {
+          "id": "f1ecf118-c872-4c0c-af87-b84b4ad9cba4",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 2430,
+          "content_type": "application/pdf",
+          "queue_seconds": 2.139149,
+          "processing_seconds": 0.039895,
+          "task_seconds": 2.179044
+        },
+        {
+          "id": "326e0abe-be08-4429-8f76-443f0ad5c8a7",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 2430,
+          "content_type": "application/pdf",
+          "queue_seconds": 0.241328,
+          "processing_seconds": 0.20952,
+          "task_seconds": 0.450848
+        },
+        {
+          "id": "f355763d-7dad-4e4f-885b-fbaaf9c9dca6",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 262144,
+          "content_type": "text/plain",
+          "queue_seconds": 0.43778,
+          "processing_seconds": 0.11111,
+          "task_seconds": 0.54889
+        },
+        {
+          "id": "386dca66-64bc-4af7-84ef-c60c0c76dd51",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 2430,
+          "content_type": "application/pdf",
+          "queue_seconds": 0.567269,
+          "processing_seconds": 0.037704,
+          "task_seconds": 0.604973
+        }
+      ]
+    },
+    {
+      "repeat": 3,
+      "worker_concurrency": 2,
+      "batch_seconds": 5.476932324003428,
+      "files_per_second": 1.0955037683602833,
+      "failure_count": 0,
+      "retry_count": 0,
+      "queue_seconds": {
+        "samples": 6,
+        "p50": 1.051605,
+        "p95": 1.4189464999999999
+      },
+      "processing_seconds": {
+        "samples": 6,
+        "p50": 0.13577899999999998,
+        "p95": 0.4698245
+      },
+      "task_seconds": {
+        "samples": 6,
+        "p50": 1.426151,
+        "p95": 1.5116405
+      },
+      "jobs": [
+        {
+          "id": "0d032f68-b63e-4d3d-8dae-85b7c9303ebe",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 2430,
+          "content_type": "application/pdf",
+          "queue_seconds": 0.956126,
+          "processing_seconds": 0.535206,
+          "task_seconds": 1.491332
+        },
+        {
+          "id": "6cb9793c-059c-4e41-8898-d16a8a045c41",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 2430,
+          "content_type": "application/pdf",
+          "queue_seconds": 1.428151,
+          "processing_seconds": 0.051625,
+          "task_seconds": 1.479776
+        },
+        {
+          "id": "9a90ecc2-dbd8-4a0d-aaee-db63658d5bd0",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 262144,
+          "content_type": "text/plain",
+          "queue_seconds": 0.864846,
+          "processing_seconds": 0.144481,
+          "task_seconds": 1.009327
+        },
+        {
+          "id": "ab001650-458b-4223-a2de-92ba81ee4b26",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 262144,
+          "content_type": "text/plain",
+          "queue_seconds": 1.004364,
+          "processing_seconds": 0.101992,
+          "task_seconds": 1.106356
+        },
+        {
+          "id": "c86394c1-f81a-4202-847d-6dfd124bf842",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 262144,
+          "content_type": "text/plain",
+          "queue_seconds": 1.391333,
+          "processing_seconds": 0.127077,
+          "task_seconds": 1.51841
+        },
+        {
+          "id": "8120cb9a-61e0-428d-829e-89d4ca52af16",
+          "status": "succeeded",
+          "error_code": null,
+          "attempt_count": 1,
+          "size": 2430,
+          "content_type": "application/pdf",
+          "queue_seconds": 1.098846,
+          "processing_seconds": 0.27368,
+          "task_seconds": 1.372526
+        }
+      ]
+    }
+  ],
+  "stages": [
+    {
+      "job_id": "9a90ecc2-dbd8-4a0d-aaee-db63658d5bd0",
+      "stage": "index.read",
+      "duration_ms": 2.24
+    },
+    {
+      "job_id": "9a90ecc2-dbd8-4a0d-aaee-db63658d5bd0",
+      "stage": "index.extract",
+      "duration_ms": 0.74
+    },
+    {
+      "job_id": "9a90ecc2-dbd8-4a0d-aaee-db63658d5bd0",
+      "stage": "index.publish",
+      "duration_ms": 103.89
+    },
+    {
+      "job_id": "ab001650-458b-4223-a2de-92ba81ee4b26",
+      "stage": "index.read",
+      "duration_ms": 0.93
+    },
+    {
+      "job_id": "ab001650-458b-4223-a2de-92ba81ee4b26",
+      "stage": "index.extract",
+      "duration_ms": 0.38
+    },
+    {
+      "job_id": "ab001650-458b-4223-a2de-92ba81ee4b26",
+      "stage": "index.publish",
+      "duration_ms": 83.66
+    },
+    {
+      "job_id": "8120cb9a-61e0-428d-829e-89d4ca52af16",
+      "stage": "index.read",
+      "duration_ms": 0.87
+    },
+    {
+      "job_id": "0d032f68-b63e-4d3d-8dae-85b7c9303ebe",
+      "stage": "index.read",
+      "duration_ms": 1.07
+    },
+    {
+      "job_id": "8120cb9a-61e0-428d-829e-89d4ca52af16",
+      "stage": "index.extract",
+      "duration_ms": 236.51
+    },
+    {
+      "job_id": "8120cb9a-61e0-428d-829e-89d4ca52af16",
+      "stage": "index.publish",
+      "duration_ms": 22.57
+    },
+    {
+      "job_id": "0d032f68-b63e-4d3d-8dae-85b7c9303ebe",
+      "stage": "index.extract",
+      "duration_ms": 215.83
+    },
+    {
+      "job_id": "c86394c1-f81a-4202-847d-6dfd124bf842",
+      "stage": "index.read",
+      "duration_ms": 1.27
+    },
+    {
+      "job_id": "c86394c1-f81a-4202-847d-6dfd124bf842",
+      "stage": "index.extract",
+      "duration_ms": 0.85
+    },
+    {
+      "job_id": "0d032f68-b63e-4d3d-8dae-85b7c9303ebe",
+      "stage": "index.publish",
+      "duration_ms": 30.26
+    },
+    {
+      "job_id": "6cb9793c-059c-4e41-8898-d16a8a045c41",
+      "stage": "index.read",
+      "duration_ms": 1.1
+    },
+    {
+      "job_id": "6cb9793c-059c-4e41-8898-d16a8a045c41",
+      "stage": "index.extract",
+      "duration_ms": 4.74
+    },
+    {
+      "job_id": "6cb9793c-059c-4e41-8898-d16a8a045c41",
+      "stage": "index.publish",
+      "duration_ms": 15.31
+    },
+    {
+      "job_id": "c86394c1-f81a-4202-847d-6dfd124bf842",
+      "stage": "index.publish",
+      "duration_ms": 107.59
+    },
+    {
+      "job_id": "ca08cf1d-1cec-4f53-804b-b14f3908d2f2",
+      "stage": "index.read",
+      "duration_ms": 0.99
+    },
+    {
+      "job_id": "ca08cf1d-1cec-4f53-804b-b14f3908d2f2",
+      "stage": "index.extract",
+      "duration_ms": 459.86
+    },
+    {
+      "job_id": "ca08cf1d-1cec-4f53-804b-b14f3908d2f2",
+      "stage": "index.publish",
+      "duration_ms": 24.16
+    },
+    {
+      "job_id": "73026c6d-165d-4d34-a703-bab48a4d56aa",
+      "stage": "index.read",
+      "duration_ms": 1.74
+    },
+    {
+      "job_id": "73026c6d-165d-4d34-a703-bab48a4d56aa",
+      "stage": "index.extract",
+      "duration_ms": 4.08
+    },
+    {
+      "job_id": "75751bf5-e98a-48ce-8259-de6a88aded58",
+      "stage": "index.read",
+      "duration_ms": 1.39
+    },
+    {
+      "job_id": "75751bf5-e98a-48ce-8259-de6a88aded58",
+      "stage": "index.extract",
+      "duration_ms": 3.44
+    },
+    {
+      "job_id": "73026c6d-165d-4d34-a703-bab48a4d56aa",
+      "stage": "index.publish",
+      "duration_ms": 178.96
+    },
+    {
+      "job_id": "75751bf5-e98a-48ce-8259-de6a88aded58",
+      "stage": "index.publish",
+      "duration_ms": 170.21
+    },
+    {
+      "job_id": "f81947b2-f531-4d48-b2f8-1adde48b1d22",
+      "stage": "index.read",
+      "duration_ms": 1.57
+    },
+    {
+      "job_id": "f81947b2-f531-4d48-b2f8-1adde48b1d22",
+      "stage": "index.extract",
+      "duration_ms": 0.72
+    },
+    {
+      "job_id": "3a9e8fb1-5015-456b-924c-3bbfccfcad1c",
+      "stage": "index.read",
+      "duration_ms": 1.7
+    },
+    {
+      "job_id": "f81947b2-f531-4d48-b2f8-1adde48b1d22",
+      "stage": "index.publish",
+      "duration_ms": 109.9
+    },
+    {
+      "job_id": "a2536f2a-ff4e-4266-82f7-a46a759a99d5",
+      "stage": "index.read",
+      "duration_ms": 0.76
+    },
+    {
+      "job_id": "a2536f2a-ff4e-4266-82f7-a46a759a99d5",
+      "stage": "index.extract",
+      "duration_ms": 3.42
+    },
+    {
+      "job_id": "a2536f2a-ff4e-4266-82f7-a46a759a99d5",
+      "stage": "index.publish",
+      "duration_ms": 17.28
+    },
+    {
+      "job_id": "3a9e8fb1-5015-456b-924c-3bbfccfcad1c",
+      "stage": "index.extract",
+      "duration_ms": 307.34
+    },
+    {
+      "job_id": "3a9e8fb1-5015-456b-924c-3bbfccfcad1c",
+      "stage": "index.publish",
+      "duration_ms": 25.02
+    },
+    {
+      "job_id": "bc9ebf27-4540-48fa-b86b-35f46c401d08",
+      "stage": "index.read",
+      "duration_ms": 1.39
+    },
+    {
+      "job_id": "bc9ebf27-4540-48fa-b86b-35f46c401d08",
+      "stage": "index.extract",
+      "duration_ms": 0.45
+    },
+    {
+      "job_id": "bc9ebf27-4540-48fa-b86b-35f46c401d08",
+      "stage": "index.publish",
+      "duration_ms": 107.47
+    },
+    {
+      "job_id": "6500eb21-6d09-4825-a4ae-5e36c97aaa94",
+      "stage": "index.read",
+      "duration_ms": 0.73
+    },
+    {
+      "job_id": "6500eb21-6d09-4825-a4ae-5e36c97aaa94",
+      "stage": "index.extract",
+      "duration_ms": 353.32
+    },
+    {
+      "job_id": "6500eb21-6d09-4825-a4ae-5e36c97aaa94",
+      "stage": "index.publish",
+      "duration_ms": 18.65
+    },
+    {
+      "job_id": "9bba9ebe-5f6a-4df6-98b0-3f7c6e08a1dd",
+      "stage": "index.read",
+      "duration_ms": 1.08
+    },
+    {
+      "job_id": "9bba9ebe-5f6a-4df6-98b0-3f7c6e08a1dd",
+      "stage": "index.extract",
+      "duration_ms": 2.55
+    },
+    {
+      "job_id": "9bba9ebe-5f6a-4df6-98b0-3f7c6e08a1dd",
+      "stage": "index.publish",
+      "duration_ms": 113.39
+    },
+    {
+      "job_id": "89715c4a-ed15-4228-b533-8991b020812d",
+      "stage": "index.read",
+      "duration_ms": 1.08
+    },
+    {
+      "job_id": "89715c4a-ed15-4228-b533-8991b020812d",
+      "stage": "index.extract",
+      "duration_ms": 4.01
+    },
+    {
+      "job_id": "89715c4a-ed15-4228-b533-8991b020812d",
+      "stage": "index.publish",
+      "duration_ms": 19.61
+    },
+    {
+      "job_id": "c210ffca-48a3-4a70-9737-5db5aab3c5bd",
+      "stage": "index.read",
+      "duration_ms": 1.85
+    },
+    {
+      "job_id": "c210ffca-48a3-4a70-9737-5db5aab3c5bd",
+      "stage": "index.extract",
+      "duration_ms": 0.6
+    },
+    {
+      "job_id": "c210ffca-48a3-4a70-9737-5db5aab3c5bd",
+      "stage": "index.publish",
+      "duration_ms": 145.42
+    },
+    {
+      "job_id": "58b45a06-0773-47ee-89b0-1c062f574c45",
+      "stage": "index.read",
+      "duration_ms": 0.99
+    },
+    {
+      "job_id": "58b45a06-0773-47ee-89b0-1c062f574c45",
+      "stage": "index.extract",
+      "duration_ms": 3.96
+    },
+    {
+      "job_id": "58b45a06-0773-47ee-89b0-1c062f574c45",
+      "stage": "index.publish",
+      "duration_ms": 17.21
+    },
+    {
+      "job_id": "4299fc5e-0b0d-48c3-ad7f-715f97a266de",
+      "stage": "index.read",
+      "duration_ms": 1.98
+    },
+    {
+      "job_id": "4299fc5e-0b0d-48c3-ad7f-715f97a266de",
+      "stage": "index.extract",
+      "duration_ms": 1.56
+    },
+    {
+      "job_id": "4299fc5e-0b0d-48c3-ad7f-715f97a266de",
+      "stage": "index.publish",
+      "duration_ms": 99.88
+    },
+    {
+      "job_id": "1ccb86dc-64b4-473a-9612-b44e0f0d7f14",
+      "stage": "index.read",
+      "duration_ms": 0.95
+    },
+    {
+      "job_id": "1ccb86dc-64b4-473a-9612-b44e0f0d7f14",
+      "stage": "index.extract",
+      "duration_ms": 0.73
+    },
+    {
+      "job_id": "1ccb86dc-64b4-473a-9612-b44e0f0d7f14",
+      "stage": "index.publish",
+      "duration_ms": 95.22
+    },
+    {
+      "job_id": "d328ca88-7c4a-46a2-a639-bdfa9615c940",
+      "stage": "index.read",
+      "duration_ms": 1.67
+    },
+    {
+      "job_id": "d328ca88-7c4a-46a2-a639-bdfa9615c940",
+      "stage": "index.extract",
+      "duration_ms": 0.47
+    },
+    {
+      "job_id": "e2fd5d90-758f-47a7-8608-e8e75cd97d79",
+      "stage": "index.read",
+      "duration_ms": 2.27
+    },
+    {
+      "job_id": "d328ca88-7c4a-46a2-a639-bdfa9615c940",
+      "stage": "index.publish",
+      "duration_ms": 105.97
+    },
+    {
+      "job_id": "98fff516-7524-4a6e-bc91-889b54b36475",
+      "stage": "index.read",
+      "duration_ms": 0.71
+    },
+    {
+      "job_id": "e2fd5d90-758f-47a7-8608-e8e75cd97d79",
+      "stage": "index.extract",
+      "duration_ms": 309.81
+    },
+    {
+      "job_id": "e2fd5d90-758f-47a7-8608-e8e75cd97d79",
+      "stage": "index.publish",
+      "duration_ms": 41.91
+    },
+    {
+      "job_id": "8686c9e7-cabd-4db9-9338-b833da65c3da",
+      "stage": "index.read",
+      "duration_ms": 0.91
+    },
+    {
+      "job_id": "98fff516-7524-4a6e-bc91-889b54b36475",
+      "stage": "index.extract",
+      "duration_ms": 381.49
+    },
+    {
+      "job_id": "8686c9e7-cabd-4db9-9338-b833da65c3da",
+      "stage": "index.extract",
+      "duration_ms": 4.38
+    },
+    {
+      "job_id": "98fff516-7524-4a6e-bc91-889b54b36475",
+      "stage": "index.publish",
+      "duration_ms": 20.91
+    },
+    {
+      "job_id": "8686c9e7-cabd-4db9-9338-b833da65c3da",
+      "stage": "index.publish",
+      "duration_ms": 24.92
+    },
+    {
+      "job_id": "ec333b94-af1f-44f0-ab57-30fc6fcfe6d5",
+      "stage": "index.read",
+      "duration_ms": 1.3
+    },
+    {
+      "job_id": "ec333b94-af1f-44f0-ab57-30fc6fcfe6d5",
+      "stage": "index.extract",
+      "duration_ms": 0.82
+    },
+    {
+      "job_id": "ec333b94-af1f-44f0-ab57-30fc6fcfe6d5",
+      "stage": "index.publish",
+      "duration_ms": 78.47
+    },
+    {
+      "job_id": "0c955fe1-1b66-44f0-bfaa-5700fd93ca9c",
+      "stage": "index.read",
+      "duration_ms": 0.83
+    },
+    {
+      "job_id": "0c955fe1-1b66-44f0-bfaa-5700fd93ca9c",
+      "stage": "index.extract",
+      "duration_ms": 189.58
+    },
+    {
+      "job_id": "0c955fe1-1b66-44f0-bfaa-5700fd93ca9c",
+      "stage": "index.publish",
+      "duration_ms": 18.19
+    },
+    {
+      "job_id": "fb07074d-7c6f-4878-b09d-6d59ee366059",
+      "stage": "index.read",
+      "duration_ms": 0.89
+    },
+    {
+      "job_id": "fb07074d-7c6f-4878-b09d-6d59ee366059",
+      "stage": "index.extract",
+      "duration_ms": 0.78
+    },
+    {
+      "job_id": "fb07074d-7c6f-4878-b09d-6d59ee366059",
+      "stage": "index.publish",
+      "duration_ms": 75.49
+    },
+    {
+      "job_id": "d5457f71-3c9c-4711-90da-70368d73930e",
+      "stage": "index.read",
+      "duration_ms": 0.67
+    },
+    {
+      "job_id": "d5457f71-3c9c-4711-90da-70368d73930e",
+      "stage": "index.extract",
+      "duration_ms": 3.62
+    },
+    {
+      "job_id": "d5457f71-3c9c-4711-90da-70368d73930e",
+      "stage": "index.publish",
+      "duration_ms": 13.54
+    },
+    {
+      "job_id": "9ca80fc2-7c89-4b1e-b155-db04eeff54e8",
+      "stage": "index.read",
+      "duration_ms": 1.16
+    },
+    {
+      "job_id": "9ca80fc2-7c89-4b1e-b155-db04eeff54e8",
+      "stage": "index.extract",
+      "duration_ms": 0.42
+    },
+    {
+      "job_id": "9ca80fc2-7c89-4b1e-b155-db04eeff54e8",
+      "stage": "index.publish",
+      "duration_ms": 84.79
+    },
+    {
+      "job_id": "2d53d7a4-e5a6-418a-a954-0c357923fa06",
+      "stage": "index.read",
+      "duration_ms": 1.02
+    },
+    {
+      "job_id": "2d53d7a4-e5a6-418a-a954-0c357923fa06",
+      "stage": "index.extract",
+      "duration_ms": 4.6
+    },
+    {
+      "job_id": "2d53d7a4-e5a6-418a-a954-0c357923fa06",
+      "stage": "index.publish",
+      "duration_ms": 18.87
+    },
+    {
+      "job_id": "88137a92-9985-47bc-88d7-1af945a04015",
+      "stage": "index.read",
+      "duration_ms": 1.46
+    },
+    {
+      "job_id": "88137a92-9985-47bc-88d7-1af945a04015",
+      "stage": "index.extract",
+      "duration_ms": 0.93
+    },
+    {
+      "job_id": "88137a92-9985-47bc-88d7-1af945a04015",
+      "stage": "index.publish",
+      "duration_ms": 98.91
+    },
+    {
+      "job_id": "326e0abe-be08-4429-8f76-443f0ad5c8a7",
+      "stage": "index.read",
+      "duration_ms": 0.76
+    },
+    {
+      "job_id": "326e0abe-be08-4429-8f76-443f0ad5c8a7",
+      "stage": "index.extract",
+      "duration_ms": 173.97
+    },
+    {
+      "job_id": "326e0abe-be08-4429-8f76-443f0ad5c8a7",
+      "stage": "index.publish",
+      "duration_ms": 16.75
+    },
+    {
+      "job_id": "f355763d-7dad-4e4f-885b-fbaaf9c9dca6",
+      "stage": "index.read",
+      "duration_ms": 0.94
+    },
+    {
+      "job_id": "f355763d-7dad-4e4f-885b-fbaaf9c9dca6",
+      "stage": "index.extract",
+      "duration_ms": 0.73
+    },
+    {
+      "job_id": "f355763d-7dad-4e4f-885b-fbaaf9c9dca6",
+      "stage": "index.publish",
+      "duration_ms": 93.4
+    },
+    {
+      "job_id": "386dca66-64bc-4af7-84ef-c60c0c76dd51",
+      "stage": "index.read",
+      "duration_ms": 0.72
+    },
+    {
+      "job_id": "386dca66-64bc-4af7-84ef-c60c0c76dd51",
+      "stage": "index.extract",
+      "duration_ms": 3.4
+    },
+    {
+      "job_id": "386dca66-64bc-4af7-84ef-c60c0c76dd51",
+      "stage": "index.publish",
+      "duration_ms": 15.27
+    },
+    {
+      "job_id": "6afc1f16-8ade-4296-9130-d9b5ef38af05",
+      "stage": "index.read",
+      "duration_ms": 0.97
+    },
+    {
+      "job_id": "6afc1f16-8ade-4296-9130-d9b5ef38af05",
+      "stage": "index.extract",
+      "duration_ms": 0.39
+    },
+    {
+      "job_id": "6afc1f16-8ade-4296-9130-d9b5ef38af05",
+      "stage": "index.publish",
+      "duration_ms": 86.66
+    },
+    {
+      "job_id": "f1ecf118-c872-4c0c-af87-b84b4ad9cba4",
+      "stage": "index.read",
+      "duration_ms": 0.84
+    },
+    {
+      "job_id": "f1ecf118-c872-4c0c-af87-b84b4ad9cba4",
+      "stage": "index.extract",
+      "duration_ms": 3.75
+    },
+    {
+      "job_id": "f1ecf118-c872-4c0c-af87-b84b4ad9cba4",
+      "stage": "index.publish",
+      "duration_ms": 17.46
+    }
+  ]
+}

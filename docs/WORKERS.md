@@ -165,3 +165,6 @@ non-default task settings while checking credential separation.
 and frontend with shared disposable content storage. It exercises the same
 authenticated smoke script used by production deployment. Local checks do not
 substitute for AWS deployment, alarm delivery or a cloud restore drill.
+
+Metric definitions, local fault coverage and repeatable task measurements are
+documented in [BACKGROUND_VALIDATION.md](BACKGROUND_VALIDATION.md).
