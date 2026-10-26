@@ -1,4 +1,5 @@
 import { Suspense, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { Sidebar, BottomNav } from "./sidebar";
@@ -7,6 +8,7 @@ import { ZineSidebar } from "./zine-sidebar";
 import { LibrarySidebar } from "./library-sidebar";
 import { SwissSidebar } from "./swiss-sidebar";
 import { MaterialSidebar, MaterialTopbar } from "./material-sidebar";
+import { MissionSidebar, MissionTopbar } from "./mission-sidebar";
 import { useAppSettings, useCourses, useSession } from "@/lib/queries";
 import { applyCourseColors } from "@/lib/theme";
 import { applyTheme, normalizeTheme } from "@/lib/themes";
@@ -32,6 +34,7 @@ function MainOutlet() {
 }
 
 export function AppShell() {
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const session = useSession();
@@ -72,6 +75,20 @@ export function AppShell() {
   }
 
   const theme = normalizeTheme(settings.data?.theme);
+  if (theme === "mission-control") {
+    return (
+      <div className="mc-app">
+        <a className="mc-skip-link" href="#mission-main">{t("mission.skipToContent")}</a>
+        <MissionSidebar />
+        <div className="mc-workspace">
+          <MissionTopbar />
+          <main id="mission-main" className={`mc-main${location.pathname === "/app" ? "" : " mc-route-main"}`}>
+            <MainOutlet />
+          </main>
+        </div>
+      </div>
+    );
+  }
   if (theme === "material") {
     return (
       <div className="me-shell">

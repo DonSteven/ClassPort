@@ -405,6 +405,7 @@ function ThemePicker() {
             key={themeMeta.id}
             type="button"
             onClick={() => pick(themeMeta.id)}
+            aria-pressed={selected}
             disabled={update.isPending}
             className={cn(
               "text-left rounded-md border px-3 py-2.5 transition-colors",

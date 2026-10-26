@@ -10,14 +10,14 @@ type WordmarkProps = {
    *
    * - `"ink"` / `"cream"`: force a specific variant.
    * - undefined (default): follow the app's `data-theme` attribute — cream for
-   *   dark-bg themes (editorial, terminal), ink otherwise.
+   *   dark-bg themes (editorial, terminal, mission-control), ink otherwise.
    * - `"auto-os"`: follow the OS's `prefers-color-scheme` instead of the app
    *   theme. Use on surfaces that live outside the app shell (landing page).
    */
   variant?: "ink" | "cream" | "auto-os";
 };
 
-const DARK_BG_THEMES = new Set(["editorial", "terminal"]);
+const DARK_BG_THEMES = new Set(["editorial", "terminal", "mission-control"]);
 
 function readTheme(): string {
   if (typeof document === "undefined") return "zine";

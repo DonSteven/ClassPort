@@ -8,6 +8,11 @@ export type ThemeMeta = {
 
 export const THEMES: ThemeMeta[] = [
   {
+    id: "mission-control",
+    label: "Mission Control",
+    tagline: "Deep navy, amber telemetry, and a clear flight plan for your semester.",
+  },
+  {
     id: "material",
     label: "Material Expressive",
     tagline: "Lavender surfaces, expressive shapes, and colorful study cards.",
@@ -76,10 +81,13 @@ export function applyTheme(raw: string | null | undefined): void {
   // before/after states, hiding the layout reflow when sidebars + grids
   // re-shape themselves. Firefox falls through to the instant apply.
   const startTransition = (
-    document as Document & { startViewTransition?: (cb: () => void) => unknown }
+    document as Document & { startViewTransition?: (cb: () => void) => { ready: Promise<void> } }
   ).startViewTransition;
   if (typeof startTransition === "function") {
-    startTransition.call(document, apply);
+    const transition = startTransition.call(document, apply);
+    // The settings response can supersede the immediate picker transition.
+    // Skipping that animation rejects ready even though the theme was applied.
+    void transition.ready.catch(() => {});
   } else {
     apply();
   }

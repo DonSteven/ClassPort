@@ -42,6 +42,10 @@ const MaterialDashboard = lazy(() =>
   import("./dashboard-material").then((m) => ({ default: m.MaterialDashboard }))
 );
 
+const MissionControlDashboard = lazy(() =>
+  import("./dashboard-mission-control").then((m) => ({ default: m.MissionControlDashboard }))
+);
+
 type DashboardSummaryTopic = { course_code: string; status: string };
 
 export default function Dashboard() {
@@ -59,6 +63,7 @@ export default function Dashboard() {
       {theme === "library" && <LibraryDashboard />}
       {theme === "swiss" && <SwissDashboard />}
       {theme === "material" && <MaterialDashboard />}
+      {theme === "mission-control" && <MissionControlDashboard />}
     </Suspense>
   );
 }

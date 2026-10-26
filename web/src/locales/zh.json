@@ -519,7 +519,8 @@
       "submitted": "已提交",
       "skipped": "已跳过",
       "planned": "计划中",
-      "confirmed": "已确认"
+      "confirmed": "已确认",
+      "blocked": "受阻"
     },
     "topicStatus": {
       "not_started": "未开始",
@@ -829,7 +830,8 @@
       "zine": "手账",
       "library": "图书馆",
       "swiss": "瑞士排版",
-      "material": "Material 灵动"
+      "material": "Material 灵动",
+      "mission-control": "航天控制台"
     },
     "tagline": {
       "editorial": "编辑风格：衬线字体、留白充足、色彩柔和。",
@@ -837,7 +839,8 @@
       "zine": "柔和奶油底色搭配粉、青、黄贴纸，营造手绘感。",
       "library": "奶油色纸张、棕褐文字和图书馆卡片目录风格。",
       "swiss": "十二列网格、红色强调与经典瑞士字体排版。",
-      "material": "浅紫色界面、灵动圆角与多彩学习卡片。"
+      "material": "浅紫色界面、灵动圆角与多彩学习卡片。",
+      "mission-control": "深海军蓝、琥珀色状态读数，清晰规划学期学习航线。"
     }
   },
   "material": {
@@ -891,5 +894,76 @@
       "warn": "需要复习",
       "critical": "下次上课前需要复习"
     }
+  },
+  "mission": {
+    "workspace": "工作空间",
+    "studyOperations": "学习任务中心",
+    "activeCourses": "在修课程",
+    "focusLine": "为接下来的学习留出空间。",
+    "yourPace": "你的空间，你的节奏。",
+    "personalWorkspace": "个人工作空间",
+    "setSemester": "设置学期",
+    "openNavigation": "打开导航",
+    "skipToContent": "跳转到主要内容",
+    "dailyPlan": "今日学习航线",
+    "greetingSubline": "看清接下来的安排，一次专注一件事。",
+    "semesterTrajectory": "学期进程",
+    "attentionRequired": "需要留意",
+    "catchUpWindow": "补习窗口",
+    "courseCorrection": "稍微调整一下航线。",
+    "courseReadiness": "课程准备情况",
+    "makeStudyPlan": "制定学习计划",
+    "studyMetrics": "学习概况",
+    "days": "天",
+    "daysOverdue": "天已逾期",
+    "submissionApproaching": "提交期限临近",
+    "allClear": "暂无待提交作业",
+    "taskQueue": "任务队列",
+    "open": "项待完成",
+    "highPriority_one": "{{count}} 项高优先级任务",
+    "highPriority_other": "{{count}} 项高优先级任务",
+    "readyWhenYouAre": "随时可以开始",
+    "catchUpNeeded": "需要补习",
+    "coursesNeedAttention_one": "{{count}} 门课程需要留意",
+    "coursesNeedAttention_other": "{{count}} 门课程需要留意",
+    "reviewBeforeLecture": "在下次上课前复习",
+    "allOnCourse": "所有课程进度正常",
+    "studyProgress": "学习进度",
+    "acrossCourses_one": "共 {{count}} 门在修课程",
+    "acrossCourses_other": "共 {{count}} 门在修课程",
+    "forwardMotion": "保持稳步前进",
+    "weekTitle": "本周学习航线",
+    "previousWeek": "上一周",
+    "nextWeek": "下一周",
+    "timetable": "每周课表，周一至周五，08:00 至 18:00；窄屏可左右滚动。",
+    "newYork": "纽约",
+    "sessions_one": "本周 {{count}} 节课",
+    "sessions_other": "本周 {{count}} 节课",
+    "scrollSchedule": "左右滑动查看 →",
+    "yourCourses": "我的课程",
+    "noCourses": "添加第一门课程，开始规划学习航线。",
+    "unscheduled": "尚未安排",
+    "onCourse": "进度正常",
+    "topicsStudied": "{{done}} / {{total}} 个知识点",
+    "upcomingDeadlines": "即将截止",
+    "easternTime": "所有时间均为美国东部时间（EST/EDT）",
+    "horizon": "提前留意接下来的安排",
+    "taskInbox": "任务收件箱",
+    "filterTasks": "筛选任务",
+    "taskFilter": {
+      "open": "待完成",
+      "done": "已完成",
+      "all": "全部任务"
+    },
+    "reopenTask": "重新打开：{{title}}",
+    "noCompleted": "完成的任务将在这里显示。",
+    "oneSmallStep": "再前进一步",
+    "footer": "积累小进步，保持前行动力。",
+    "readiness": {
+      "ok": "进度正常",
+      "warn": "需要复习",
+      "critical": "下次上课前需要复习"
+    },
+    "today": "今天"
   }
 }

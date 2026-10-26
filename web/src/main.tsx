@@ -6,6 +6,7 @@ import "./styles/zine.css";
 import "./styles/library.css";
 import "./styles/swiss.css";
 import "./styles/material.css";
+import "./styles/mission-control.css";
 import App from "./App";
 import { applyTheme } from "./lib/themes";
 import "./lib/i18n";
