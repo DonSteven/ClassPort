@@ -13,7 +13,7 @@ export type AppSettings = {
   theme: string | null;
 };
 
-export type ThemeId = "terminal" | "zine" | "library" | "swiss" | "editorial";
+export type ThemeId = "terminal" | "zine" | "library" | "swiss" | "editorial" | "material";
 
 export type StatusKind = string;
 

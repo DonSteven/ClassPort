@@ -8,6 +8,11 @@ export type ThemeMeta = {
 
 export const THEMES: ThemeMeta[] = [
   {
+    id: "material",
+    label: "Material Expressive",
+    tagline: "Lavender surfaces, expressive shapes, and colorful study cards.",
+  },
+  {
     id: "terminal",
     label: "Terminal",
     tagline: "Mono everywhere, teal-on-black, hacker cockpit.",

@@ -6,6 +6,7 @@ import { TerminalSidebar } from "./terminal-sidebar";
 import { ZineSidebar } from "./zine-sidebar";
 import { LibrarySidebar } from "./library-sidebar";
 import { SwissSidebar } from "./swiss-sidebar";
+import { MaterialSidebar, MaterialTopbar } from "./material-sidebar";
 import { useAppSettings, useCourses, useSession } from "@/lib/queries";
 import { applyCourseColors } from "@/lib/theme";
 import { applyTheme, normalizeTheme } from "@/lib/themes";
@@ -71,6 +72,18 @@ export function AppShell() {
   }
 
   const theme = normalizeTheme(settings.data?.theme);
+  if (theme === "material") {
+    return (
+      <div className="me-shell">
+        <MaterialSidebar />
+        <main className="me-main min-w-0 pb-24 md:pb-0">
+          <MaterialTopbar />
+          <MainOutlet />
+        </main>
+        <BottomNav />
+      </div>
+    );
+  }
   if (theme === "terminal") {
     return (
       <div className="tm-app">

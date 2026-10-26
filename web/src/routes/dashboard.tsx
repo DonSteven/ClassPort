@@ -24,7 +24,7 @@ import type { CourseCode } from "@/data/types";
 import { normalizeTheme } from "@/lib/themes";
 
 // Themed dashboards are lazy: an editorial-theme user shouldn't download
-// four other implementations. Each chunk loads only when its theme is active.
+// the other implementations. Each chunk loads only when its theme is active.
 const TerminalDashboard = lazy(() =>
   import("./dashboard-terminal").then((m) => ({ default: m.TerminalDashboard }))
 );
@@ -36,6 +36,10 @@ const LibraryDashboard = lazy(() =>
 );
 const SwissDashboard = lazy(() =>
   import("./dashboard-swiss").then((m) => ({ default: m.SwissDashboard }))
+);
+
+const MaterialDashboard = lazy(() =>
+  import("./dashboard-material").then((m) => ({ default: m.MaterialDashboard }))
 );
 
 type DashboardSummaryTopic = { course_code: string; status: string };
@@ -54,6 +58,7 @@ export default function Dashboard() {
       {theme === "zine" && <ZineDashboard />}
       {theme === "library" && <LibraryDashboard />}
       {theme === "swiss" && <SwissDashboard />}
+      {theme === "material" && <MaterialDashboard />}
     </Suspense>
   );
 }

@@ -828,14 +828,68 @@
       "terminal": "终端",
       "zine": "手账",
       "library": "图书馆",
-      "swiss": "瑞士排版"
+      "swiss": "瑞士排版",
+      "material": "Material 灵动"
     },
     "tagline": {
       "editorial": "编辑风格：衬线字体、留白充足、色彩柔和。",
       "terminal": "等宽字体、黑底青绿色，呈现终端控制台风格。",
       "zine": "柔和奶油底色搭配粉、青、黄贴纸，营造手绘感。",
       "library": "奶油色纸张、棕褐文字和图书馆卡片目录风格。",
-      "swiss": "十二列网格、红色强调与经典瑞士字体排版。"
+      "swiss": "十二列网格、红色强调与经典瑞士字体排版。",
+      "material": "浅紫色界面、灵动圆角与多彩学习卡片。"
+    }
+  },
+  "material": {
+    "workspace": "学习空间",
+    "learningSpace": "属于你的学习空间",
+    "focusLine": "多一点专注，",
+    "progressLine": "多一点进步。",
+    "semesterProgress": "学期进度",
+    "greetingSubline": "理清计划，每天前进一点。",
+    "catchupTitle": "补上一点，接下来就轻松一点。",
+    "reviewTopics": "复习主题",
+    "atAGlance": "学习概览",
+    "needsLove": "需要再看一看",
+    "daysLeft": "天后截止",
+    "daysOverdue": "天前已截止",
+    "acrossCourses": "共 {{count}} 门课程",
+    "allCaughtUp": "下一次上课前的主题都跟上了。",
+    "learningProgress": "学习进度",
+    "smallWins": "小小完成，慢慢积累",
+    "tasksDone": "任务已完成",
+    "winsHint": "每完成一件事，都在向前一步。",
+    "curiosity": "跟随你的好奇心",
+    "learningTitle": "正在学习的课程",
+    "courseCount": "{{count}} 门课程",
+    "noCourses": "从这里开启下一章。",
+    "noCoursesHint": "添加第一门课程，查看课表、学习进度和截止日期。",
+    "topicsStudied": "已学 {{done}} / {{total}} 个主题",
+    "horizon": "即将到来的截止日期",
+    "deadlineHint": "现在多一点规划，之后少一点匆忙。",
+    "easternTime": "所有时间均为美国东部时间（EST/EDT）",
+    "oneThing": "一次做好一件事",
+    "newTask": "添加一个新任务",
+    "filterTasks": "筛选任务",
+    "taskFilter": {
+      "todo": "待完成",
+      "all": "全部任务",
+      "done": "已完成"
+    },
+    "noCompleted": "完成的任务会显示在这里。",
+    "reopenTask": "重新打开：{{title}}",
+    "structure": "给学习一点秩序",
+    "weekTitle": "一周安排，一目了然",
+    "classCount": "{{count}} 节课",
+    "manageCourses": "管理课程",
+    "previousWeek": "上一周",
+    "nextWeek": "下一周",
+    "timetable": "周一至周五课表，08:00 至 18:00",
+    "footer": "为你的学习方式而设计。",
+    "readiness": {
+      "ok": "进度正常",
+      "warn": "需要复习",
+      "critical": "下次上课前需要复习"
     }
   }
 }

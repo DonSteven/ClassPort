@@ -828,14 +828,71 @@
       "terminal": "Terminal",
       "zine": "Zine",
       "library": "Library",
-      "swiss": "Swiss"
+      "swiss": "Swiss",
+      "material": "Material Expressive"
     },
     "tagline": {
       "editorial": "Editorial style — serif, airy, muted.",
       "terminal": "Mono everywhere, teal-on-black, hacker cockpit.",
       "zine": "Pastel cream + pink/cyan/yellow stickers, hand-drawn feel.",
       "library": "Cream paper, sepia type, card-catalog aesthetic.",
-      "swiss": "12-column grid, red accent, Helvetica-era Swiss typography."
+      "swiss": "12-column grid, red accent, Helvetica-era Swiss typography.",
+      "material": "Lavender surfaces, expressive shapes, and colorful study cards."
+    }
+  },
+  "material": {
+    "workspace": "Workspace",
+    "learningSpace": "Your learning space",
+    "focusLine": "A little focus.",
+    "progressLine": "A lot of progress.",
+    "semesterProgress": "Semester progress",
+    "greetingSubline": "A clear plan. A little progress, every day.",
+    "catchupTitle": "A little catch-up goes a long way.",
+    "reviewTopics": "Review topics",
+    "atAGlance": "Your study at a glance",
+    "needsLove": "Needs a little love",
+    "daysLeft": "days left",
+    "daysOverdue": "days overdue",
+    "acrossCourses_one": "Across {{count}} course",
+    "acrossCourses_other": "Across {{count}} courses",
+    "allCaughtUp": "All caught up for your next classes.",
+    "learningProgress": "Learning progress",
+    "smallWins": "Small wins add up",
+    "tasksDone": "tasks done",
+    "winsHint": "Every finished task is a step forward.",
+    "curiosity": "Follow your curiosity",
+    "learningTitle": "What you’re learning",
+    "courseCount_one": "{{count}} course",
+    "courseCount_other": "{{count}} courses",
+    "noCourses": "Your next chapter starts here.",
+    "noCoursesHint": "Add your first course to see your schedule, progress, and deadlines.",
+    "topicsStudied": "{{done}} of {{total}} studied",
+    "horizon": "On the horizon",
+    "deadlineHint": "A little planning now. A little less rush later.",
+    "easternTime": "All times Eastern (EST/EDT)",
+    "oneThing": "One thing at a time",
+    "newTask": "Make room for a new task",
+    "filterTasks": "Filter tasks",
+    "taskFilter": {
+      "todo": "To do",
+      "all": "All tasks",
+      "done": "Completed"
+    },
+    "noCompleted": "Your completed tasks will appear here.",
+    "reopenTask": "Reopen: {{title}}",
+    "structure": "A little structure",
+    "weekTitle": "Your week, in view",
+    "classCount_one": "{{count}} class",
+    "classCount_other": "{{count}} classes",
+    "manageCourses": "Manage courses",
+    "previousWeek": "Previous week",
+    "nextWeek": "Next week",
+    "timetable": "Weekly timetable, Monday to Friday, 08:00 to 18:00",
+    "footer": "Made for the way you learn.",
+    "readiness": {
+      "ok": "On track",
+      "warn": "Needs review",
+      "critical": "Review before your next lecture"
     }
   }
 }
