@@ -12,9 +12,3 @@ name        = "classport-prod"
 # Applying an email subscription sends a confirmation email; confirm it to receive alerts.
 operations_email = null
 # Never put credentials or secret values in this file.
-
-# Copy the repository's actual OIDC subject; include owner/repository IDs if used.
-# Protect the GitHub production environment to allow main and release tags only.
-# github_oidc_subject = "repo:OWNER/REPOSITORY:environment:production"
-# Set this when the AWS account already has a GitHub OIDC provider:
-# github_oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"

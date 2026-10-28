@@ -5,13 +5,6 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  workflow_call:
-    inputs:
-      ref:
-        description: 'Commit SHA or ref to check'
-        required: false
-        type: string
-        default: ''
 
 jobs:
   infrastructure:
@@ -22,8 +15,6 @@ jobs:
         working-directory: infra/aws
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref || github.sha }}
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.13.5
@@ -41,8 +32,6 @@ jobs:
       PROCESS_LOG_DIR: ${{ github.workspace }}/test-results/processes
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref || github.sha }}
       - name: Prepare test configuration
         run: |
           cp .env.ci .env
@@ -91,8 +80,6 @@ jobs:
       VITE_GOOGLE_SITE_VERIFICATION: ''
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref || github.sha }}
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:

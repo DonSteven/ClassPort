@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Stable, root-only SSM launcher. All versioned deployment files come from ECR.
-# Usage: classport-release BACKEND@sha256:... FRONTEND@sha256:... COMMIT RUN_ID-ATTEMPT
+# Usage: classport-release BACKEND@sha256:... FRONTEND@sha256:... COMMIT RELEASE_ID-ATTEMPT
 set -euo pipefail
 umask 077
 set -a

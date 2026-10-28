@@ -8,7 +8,7 @@ home server, a spare laptop.
 If you only want a high-level pitch, see [README.md](./README.md). This file
 is the operational walkthrough.
 
-For EC2/RDS releases built in CI, follow [the production guide](docs/PRODUCTION.md).
+For EC2/RDS releases from a short-lived local AWS login, follow [the production guide](docs/PRODUCTION.md).
 It uses a separate Compose file and script; the local workflow below is unchanged.
 
 ---

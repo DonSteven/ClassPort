@@ -1,121 +1,107 @@
 # Production delivery
 
-Production uses one GitHub Actions → ECR → SSM → EC2 release flow. The local
-`deploy.sh` remains the local Docker development workflow. Provisioning, HTTPS,
-persistent storage and initial secrets are described in [the AWS guide](../infra/aws/README.md).
+Production is released from a workstation using a short-lived AWS CLI login:
+committed source → ECR image pair → exact-image checks → SSM → EC2. GitHub stores
+source and runs CI. Provisioning, HTTPS and initial configuration are described
+in [the AWS guide](../infra/aws/README.md). `deploy.sh` is the separate local Docker
+development workflow.
 
-The backend digest also runs the file worker, dispatcher and recovery services.
-Redis uses a private Docker network and its own persistent directory. The
-coordinators receive `.env.coordinator` with a restricted database identity.
-The API and background services share task settings from `.env.jobs`, generated
-from the versioned application secret. Normal releases include background
-processing in switching and rollback. See
-[WORKERS.md](WORKERS.md) for configuration and task recovery.
+The backend image also runs the worker, dispatcher, recovery and storage-maintenance
+services. Redis uses a private Docker network and a persistent directory. Runtime
+and coordination database identities remain separate. AWS material bytes use a
+private, versioned S3 bucket; see [S3_STORAGE.md](S3_STORAGE.md).
 
-AWS material bytes use a separate private versioned S3 bucket. API/worker have
-no material mount; the host rotates a restricted STS grant through an isolated
-read-only directory. See [S3_STORAGE.md](S3_STORAGE.md) for setup and cutover.
+## Prepare the workstation
 
-## Configure the release environment
+Install AWS CLI 2.32.0 or later, Terraform, Docker with Buildx, Python 3.12+ and uv.
+Use an authenticated short-lived CLI profile. For console login:
 
-Create the GitHub `production` environment. Restrict its deployment branches/tags
-to `main` and protected `v*.*.*` release tags; restrict who may create those tags.
-Protect `main` with required CI checks. Both the publisher and deploy job use this
-environment. Required reviewers are optional; configuring them pauses those jobs
-for approval instead of allowing fully automatic releases.
+```bash
+aws login --profile classport
+export AWS_PROFILE=classport
+aws sts get-caller-identity
+uv sync --frozen
+```
 
-Set `github_oidc_subject` in Terraform to this repository's actual production
-OIDC subject. Use the exact subject, including immutable owner/repository IDs
-when GitHub uses them. Its final segment must be `:environment:production`.
-If the AWS account already has the GitHub OIDC provider, supply
-`github_oidc_provider_arn` to reuse it. The default null subject grants no GitHub
-access. See [GitHub's AWS OIDC guide](https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws).
+Keep an existing IAM Identity Center profile if that is how the account is managed.
+The profile must be allowed to publish/pull images in the two ECR repositories and
+send `AWS-RunShellScript` to the application's EC2 instance and read its result.
+Infrastructure provisioning additionally needs the permissions listed in the AWS
+guide. EC2 uses its own instance role to read configuration and pull images.
+Credentials stay in the local AWS login cache and are never committed or uploaded
+to GitHub. An expired session must be renewed before release.
 
-Set these variables in the production environment:
+## First installation
 
-| Variable | Terraform output or value |
-|---|---|
-| `AWS_REGION` | `aws_region` |
-| `AWS_DEPLOY_ROLE_ARN` | `github_deploy_role_arn` |
-| `AWS_INSTANCE_ID` | `instance_id` |
-| `BACKEND_REPOSITORY` | `backend_repository` |
-| `FRONTEND_REPOSITORY` | `frontend_repository` |
-| `PUBLIC_SITE_URL` | `public_url`, the same HTTPS origin configured on the host |
-| `PUBLIC_SITE_NAME` | Optional; defaults to ClassPort |
-| `PUBLIC_SHOW_LANDING` | Optional; defaults to false |
-| `PUBLIC_GOOGLE_SITE_VERIFICATION` | Optional |
-
-The GitHub role can publish/read the two ECR repositories and send the approved
-shell document to the one EC2 instance. It cannot read Secrets Manager or manage
-IAM. SSM executes as root on that host, so granting this deployment role is a
-privileged trust decision. The host's separate role reads application/database
-configuration. No AWS access key, SSH key, application password or database URL
-is stored in GitHub release configuration.
+1. Commit the release source and push it to the ClassPort repository. Require the
+   existing CI checks to pass for that commit.
+2. Configure `infra/aws/terraform.tfvars`, inspect a new plan, and apply the approved
+   infrastructure. Preserve its state locally with restricted permissions.
+3. Point the exact configured hostname at Terraform's `public_ip` in Cloudflare,
+   then verify Caddy's HTTPS certificate.
+4. Upload the installation configuration to the application secret as described in
+   the AWS guide. Preserve existing session/encryption keys and database passwords.
+5. If importing an existing installation, back up and migrate its database and
+   registered file versions before starting production writers. Existing local bytes
+   require the [storage cutover](STORAGE_LIFECYCLE.md#localstorage-to-s3-cutover);
+   a new deployment does not automatically transfer a local database or Docker volume.
+6. Run the release command below after DNS, configuration and any data cutover are ready.
 
 ## One release
 
-Push to protected `main`, push a protected version tag, or use Deploy's manual
-Run workflow button. Every target must resolve to a commit on `main` history.
-All triggers follow the same gates:
+From a clean, committed checkout whose CI has passed:
 
-1. Resolve one commit and run existing source checks against that SHA.
-2. Query each immutable ECR SHA tag. Reuse an existing image; build/push only a
-   missing image. This also resumes a run that published just one image.
-3. Pull both registry digests, verify their commit labels and bundled release
-   files, then test login, assets, authenticated REST and MCP against disposable
-   PostgreSQL. Reused images are tested again on every run.
-4. Save `release.env` with the commit and both digests, plus `images.json`.
-5. Use a short-lived OIDC session to send one SSM command. Wait for its final
-   status and exit code, then validate the host result and running image pair.
+```bash
+uv run --no-sync python -m scripts.release_local --profile classport
+```
 
-A SHA tag is immutable. Changes to frontend public settings require a new commit;
-rerunning an old commit intentionally reuses its originally built frontend.
+The command reads region, instance, public origin and ECR repository addresses from
+this checkout's Terraform outputs. The selected AWS profile is used for all cloud
+calls, and its account must match the image repositories. `PUBLIC_SITE_NAME`,
+`PUBLIC_SHOW_LANDING` and `PUBLIC_GOOGLE_SITE_VERIFICATION` are optional frontend
+build settings; their defaults are ClassPort, false and empty. Changing a build
+setting requires a new source commit because image tags are immutable.
 
-The root-only `classport-release` entrypoint locks the host, pulls both digests
-and verifies their commit labels. It extracts Compose, `deploy-prod.sh` and
-`bootstrap.py` from `/app/release` in that backend image to a version directory.
-Application release files are never read from EC2 user data.
+The command performs these steps:
 
-The one maintenance container uses that backend digest to prepare roles, run
-migrations once, grant runtime access, seed the operator/check account and write
-runtime configuration, in that order. Only this short-lived container sees
-administrator and migration credentials. Secret input files under `/run` are
-removed on exit; no `.env.migration` file is retained on the AWS host.
+1. Reject uncommitted source and resolve one full commit SHA.
+2. Verify the AWS login and log in to ECR without printing the registry password.
+3. Reuse existing immutable SHA images or build/push the missing image in the pair.
+4. Pull the two exact registry digests and run `tests/test_release_images.py` against
+   disposable local PostgreSQL/Redis and application containers. This checks image
+   commit labels, bundled release files, login, assets, authenticated REST, file
+   processing and MCP. A failed check stops before any production deployment.
+5. Send one SSM command, wait for its final result, and verify the requested image
+   pair and successful database/application outcomes.
 
-The versioned `deploy-prod.sh` switches both application images with building
-disabled. It checks readiness through the frontend, performs public HTTPS login,
-REST and MCP checks, uploads a small file and waits for searchable processing,
-then verifies download/MCP reads. It inspects API, frontend and background image
-references against the requested digests. Only success advances `releases/current`
-and `previous`.
+Results are saved under the ignored `releases/<UTC-release-id>/` directory:
 
-## Results and failures
+- `release.env` and `images.json`: commit, exact image pair and build/reuse decisions.
+- `image-tests.xml`: local exact-image check results.
+- `ssm-result.json`, `ssm-stdout.log`, `ssm-stderr.log`: command ID, invocation,
+  database/application outcomes and the bounded host output.
 
-GitHub retains these artifacts for 90 days:
+Retain the whole release directory privately for operational evidence. The host
+keeps attempt reports under `/opt/classport/attempts/COMMIT.RELEASE_ID-ATTEMPT/`
+and full command logs under `/opt/classport/commands/`.
 
-- `production-release`: commit, exact image pair and build/reuse results.
-- `production-deployment-result`: the manifest, SSM command ID, invocation status,
-  output tail, database step outcomes, application checks and recovery result.
-- `production-pipeline-result`: check/publish/deploy job results, including skipped
-  jobs when an earlier gate failed. The run summary shows the same stage results.
+## Host switching and failures
 
-The host saves `/opt/classport/attempts/COMMIT.RUN_ID-ATTEMPT/result.json`, including
-start/end times, requested images, database preparation and application outcomes.
-Database and application reports are kept alongside it. The SSM launcher stores
-the full command log under `/opt/classport/commands/COMMIT.RUN_ID-ATTEMPT.log` and
-returns a bounded tail plus the structured result to GitHub.
+The root-only `classport-release` launcher locks the host, pulls the requested
+image digests and verifies their commit labels. It extracts Compose, the switch
+script and bootstrap from that backend image. A short-lived maintenance container
+prepares database roles, runs migrations once, preserves the existing operator
+password and writes runtime/check configuration. Temporary secret files are removed.
 
-A failed check never starts production deployment. Pull/database preparation
-failure stops before the application switch. Failure after switching starts
-restores both old images/configuration and repeats their checks. Recovery success
-still returns failure (exit 1); failed recovery returns exit 2. A failed first
-release has no previous version to restore. Current/previous promotion failures
-also restore the recorded pointers.
+The application switch starts both images and background services, checks public
+HTTPS login, REST, file upload/index/search/download and MCP, and checks running
+image references. Only success advances the current and previous release pointers.
 
-An SSM timeout or query failure is recorded as unconfirmed remote state, never as
-success. Inspect the saved command ID and host result before starting another
-release; a second command is not automatically sent. The host lock also prevents
-an overlapping application deployment. See [SSM command results](https://docs.aws.amazon.com/cli/latest/reference/ssm/get-command-invocation.html).
+Pull or database-preparation failure stops before application switching. Failure
+after a switch restores the previous images/configuration and checks them again;
+a first release has no previous version to restore. An SSM timeout or query failure
+is recorded as unconfirmed remote state. Inspect that command and its saved report
+before starting another release; the command is never resubmitted automatically.
 
 ## Emergency rollback
 
@@ -135,8 +121,8 @@ sudo bash -c '
 
 Keep both current/previous image pairs and their saved Compose files available.
 Rollback checks the restored services and skips database initialization. A normal
-release is always initiated through GitHub; directly invoking the application
-switch script is not a complete release.
+release uses the local release command; directly invoking the application switch
+script is not a complete release.
 
 ## Database compatibility and acceptance
 
@@ -146,8 +132,8 @@ through the rollback window. Keep applied migration files immutable. Database
 backup restoration is a separate recovery operation.
 
 Local scripted tests and mocked Terraform validation do not demonstrate a cloud
-release. Before accepting A7, run the GitHub workflow against AWS, verify its
-recorded digests match the running containers, confirm HTTPS/login/REST/MCP
-checks, and exercise the changed failure/recovery path. Keep the resulting run
-and command records as acceptance evidence.
+release. Before accepting a release, run the local release command against AWS, verify
+its recorded digests match the running containers, and confirm HTTPS, login, REST,
+file processing and MCP checks. Keep the release directory and host command records
+as acceptance evidence.
 

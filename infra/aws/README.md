@@ -29,7 +29,7 @@ must be approved by the operator before execution.
 | `cloud-init.yaml`, `scripts/setup-host.sh` | Install Docker Compose/Caddy/AWS CLI, identify and mount EBS, configure HTTPS/logging |
 | `scripts/create-config.py` | Generate initial secrets locally with hidden password input |
 | `scripts/bootstrap.py` | Provision DB identities, apply existing migrations and initialize operator/release checks |
-| `scripts/release.sh`, `../../scripts/publish_release.py`, `../../scripts/deploy_via_ssm.py` | One GitHub release flow: publish/reuse ECR images, invoke SSM and retain results |
+| `scripts/release.sh`, `../../scripts/release_local.py`, `../../scripts/publish_release.py`, `../../scripts/deploy_via_ssm.py` | Local release flow: publish/reuse ECR images, invoke SSM and retain results |
 | `tests/environment.tftest.hcl`, `../../tests/test_aws_bootstrap.py` | Mock AWS tests and real local PostgreSQL permissions/bootstrap tests |
 
 The backend image includes its Compose file, application switch script and DB
@@ -70,7 +70,7 @@ is also supported by the installed provider. Select it with
 refresh that profile's short-lived cache under `~/.aws/login/cache`. No static
 access keys or credential-export wrapper are needed for this checkout.
 The provisioning identity needs IAM/PassRole permissions and access to the listed
-services; the GitHub release role gets scoped ECR/SSM rights, the configuration operator needs
+services; the local publisher needs ECR/SSM rights, the configuration operator needs
 `secretsmanager:PutSecretValue` on this application secret, and the administrator
 needs SSM session rights. EC2 receives its own separate instance role.
 
@@ -104,9 +104,9 @@ replaces EC2 on the next approved apply; EBS and the public EIP are retained.
 ## Cloudflare DNS, HTTPS and PUBLIC_URL
 
 After an approved apply, create an **A** record in the Cloudflare zone: name
-`study`, content equal to Terraform's `public_ip`, initially **DNS only** (gray
+`@` for the zone apex (or the configured subdomain), content equal to Terraform's `public_ip`, initially **DNS only** (gray
 cloud). Remove conflicting A/AAAA records. This does not require a Cloudflare API
-token on EC2 or in Terraform. Wait until `study.<your-domain>` resolves publicly
+token on EC2 or in Terraform. Wait until the configured hostname resolves publicly
 to that IP. Leave inbound TCP 80 and 443 reachable; Caddy uses ACME HTTP/TLS
 challenges and renews its certificate automatically. Do not substitute an example
 hostname in a real apply.
@@ -161,19 +161,19 @@ Fernet encryption key or session/database passwords on normal releases. Keep the
 application secret for recovery; changing the Fernet key would make stored user
 integration secrets unreadable. Automatic app credential rotation is not configured.
 
-## 3. Enable GitHub delivery
+## 3. Release from the workstation
 
-Follow [Production delivery](../../docs/PRODUCTION.md) to configure the production
-GitHub environment, exact OIDC subject and variables from Terraform outputs.
-`github_oidc_subject` defaults to null: GitHub access is enabled only when the
-actual trusted subject is supplied and the approved infrastructure update applied.
-Reuse an existing account-wide provider with `github_oidc_provider_arn`.
+Push the committed ClassPort source to GitHub and wait for its CI checks. Then use
+[Production delivery](../../docs/PRODUCTION.md) with a short-lived local AWS profile:
 
-Push to protected main, use a protected release tag, or manually run Deploy.
-Every trigger checks one main-history commit, publishes/reuses its immutable ECR
-images, tests the exact digests, then sends and waits for SSM execution. GitHub
-holds no application/database secret or long-lived AWS key. EC2 pulls images and
-reads current configuration with its own instance role.
+```bash
+uv run --no-sync python -m scripts.release_local --profile classport
+```
+
+This reads Terraform outputs, verifies the caller's account, publishes/reuses the
+immutable ECR image pair, tests those digests locally, and sends and waits for one
+SSM release command. Results remain in the ignored local `releases/` directory.
+The EC2 host pulls images and reads configuration with its own instance role.
 
 One maintenance container prepares DB roles, applies migrations once, configures
 runtime access and initializes accounts. The root-only temporary secret directory
@@ -218,7 +218,7 @@ An apply alone does not demonstrate end-to-end acceptance.
 Container stdout/stderr goes to the `log_group` output with 14-day retention.
 Host setup diagnostics: `sudo journalctl -u cloud-final` and
 `sudo journalctl -u caddy`. No access logging of OAuth query strings is enabled.
-GitHub retains the release manifest and SSM/database/application results. The
+The local release directory retains the manifest and SSM/database/application results. The
 host retains attempt reports under `/opt/classport/attempts` and full command logs
 under `/opt/classport/commands`. See the production guide for the artifact names,
 failure semantics and timeout handling.
@@ -242,7 +242,7 @@ EBS is separate from EC2 and has `prevent_destroy`; Docker requires its mount
 before starting on reboot. On initial boot only an unsigned empty disk matching
 the exact EBS volume ID is formatted; an existing ext4 volume is mounted intact.
 Cloud-init changes replace EC2 while preserving that volume and EIP. The new host
-needs a GitHub release to restore the running containers and host config.
+needs a local release to restore the running containers and host config.
 Instance resize and disk growth/filesystem expansion are operator maintenance.
 
 RDS deletion protection defaults on, final snapshots are mandatory, and S3/ECR

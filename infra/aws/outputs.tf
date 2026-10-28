@@ -43,8 +43,3 @@ output "recovery_policy_arn" {
   description = "Read source backup versions/configuration/images from an isolated recovery identity."
   value       = aws_iam_policy.recovery.arn
 }
-
-output "github_deploy_role_arn" {
-  description = "GitHub Actions AWS_DEPLOY_ROLE_ARN variable; null until OIDC is configured."
-  value       = try(aws_iam_role.github[0].arn, null)
-}

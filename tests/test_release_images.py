@@ -2,7 +2,7 @@
 
 Opt in with CLASSPORT_TEST_BACKEND_IMAGE, CLASSPORT_TEST_FRONTEND_IMAGE and
 CLASSPORT_TEST_RELEASE_COMMIT.
-The deployment workflow supplies the exact registry digests, without rebuilding.
+The local release command supplies the exact registry digests, without rebuilding.
 """
 import os
 from contextlib import ExitStack

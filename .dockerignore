@@ -28,6 +28,12 @@ releases/
 incoming/
 data/
 release.env
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+terraform.tfvars
+*.auto.tfvars
 
 # Env files never go into images — env comes from compose env_file.
 .env

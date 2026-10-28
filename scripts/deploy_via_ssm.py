@@ -64,7 +64,7 @@ def deploy(manifest: dict, instance: str, run: str, output: Path, timeout: int =
     if not re.fullmatch(r"i-(?:[a-f0-9]{8}|[a-f0-9]{17})", instance):
         raise ValueError("Invalid target instance ID")
     if not re.fullmatch(r"[0-9]+-[0-9]+", run):
-        raise ValueError("Release run must be GitHub run_id-run_attempt")
+        raise ValueError("Release run must be a numeric release ID and attempt, separated by a hyphen")
     output.mkdir(parents=True, exist_ok=True)
     record = {"manifest": manifest, "run": run, "instance_id": instance,
               "started_at": datetime.now(timezone.utc).isoformat(), "status": "sending"}
@@ -131,4 +131,4 @@ def deploy(manifest: dict, instance: str, run: str, output: Path, timeout: int =
 
 if __name__ == "__main__":
     raise SystemExit(deploy(read_manifest(Path("release/release.env")), os.environ["AWS_INSTANCE_ID"],
-                           f"{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}", Path("release")))
+                           os.environ["RELEASE_RUN_ID"], Path("release")))
