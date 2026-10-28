@@ -24,7 +24,8 @@ class S3Storage:
             self.client = client or self.session.client(
                 "s3", region_name=region, endpoint_url=endpoint,
                 config=Config(signature_version="s3v4", connect_timeout=2, read_timeout=5,
-                              retries={"total_max_attempts": 1}),
+                              retries={"total_max_attempts": 1},
+                              s3={} if endpoint else {"addressing_style": "virtual"}),
             )
         except BotoCoreError:
             raise StorageUnavailable("S3 credentials are unavailable") from None

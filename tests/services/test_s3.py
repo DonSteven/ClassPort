@@ -3,6 +3,7 @@ import base64
 import hashlib
 from uuid import uuid4
 from unittest.mock import AsyncMock
+from urllib.parse import urlsplit
 
 import boto3
 from botocore.stub import Stubber
@@ -44,6 +45,22 @@ def put(s3, key, data, content_type="text/plain"):
     return s3.put_object(Bucket="classport-test-materials", Key=key, Body=data,
                          ContentType=content_type,
                          ChecksumSHA256=base64.b64encode(hashlib.sha256(data).digest()).decode())["VersionId"]
+
+
+@pytest.mark.parametrize("endpoint,host,path_prefix", [
+    (None, "classport-test-materials.s3.us-east-2.amazonaws.com", "/objects/"),
+    ("http://127.0.0.1:9000", "127.0.0.1", "/classport-test-materials/objects/"),
+])
+def test_signed_transfers_use_the_bucket_region_and_support_custom_endpoints(s3, endpoint, host, path_prefix):
+    store = S3Storage("classport-test-materials", region="us-east-2", endpoint=endpoint)
+    ref = ObjectRef("objects/presign-check")
+    upload = store.upload_url(ref, file_id="file", version_id="version", content_type="text/plain",
+                              sha256=hashlib.sha256(b"content").hexdigest())
+    download = store.download_url(ObjectRef(ref.key, "fixed-version"), file_id="file", version_id="version")
+    for target in (upload, download):
+        url = urlsplit(target["url"])
+        assert url.hostname == host
+        assert url.path.startswith(path_prefix)
 
 
 async def direct(s3, data=b"quantum mechanics", path="notes.txt", **metadata):
