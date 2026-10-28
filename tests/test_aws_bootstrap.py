@@ -158,6 +158,8 @@ def test_fresh_database_uses_separate_non_admin_runtime_role(monkeypatch):
 @pytest.mark.parametrize("has_local_versions", [False, True])
 def test_s3_cutover_requires_completed_local_versions_to_be_migrated(tmp_path, monkeypatch, has_local_versions):
     from unittest.mock import MagicMock
+    for name in ("PGSSLMODE", "PGSSLROOTCERT", "PGCONNECT_TIMEOUT"):
+        monkeypatch.setenv(name, "")
     config = {key: "test-value" for key in bootstrap.REQUIRED_KEYS}
     config.update(OPERATOR_EMAIL="operator@example.test", SMOKE_EMAIL="smoke@example.test",
                   APP_DB_PASSWORD="runtime-only", MIGRATION_DB_PASSWORD="migration-only",

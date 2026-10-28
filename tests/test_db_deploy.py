@@ -46,7 +46,7 @@ def test_deploy_runs_maintenance_separately_and_skips_local_db_when_external(tmp
     assert "curl -fsS --max-time 3 http://127.0.0.1:8000/api/health" in calls
     migrate = next(i for i, c in enumerate(calls) if c.endswith("run --rm --no-deps migrate"))
     seed = next(i for i, c in enumerate(calls) if "scripts/seed_operator_password.py" in c)
-    start = next(i for i, c in enumerate(calls) if c.endswith("up -d classport redis worker dispatcher job-recovery"))
+    start = next(i for i, c in enumerate(calls) if c.endswith("up -d classport redis worker dispatcher job-recovery storage-maintenance"))
     assert migrate < seed < start
     assert all("run --rm --no-deps classport" not in c for c in calls)
     if external:

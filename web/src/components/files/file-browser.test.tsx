@@ -1,4 +1,5 @@
 import { webcrypto } from "node:crypto";
+import { Buffer } from "node:buffer";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,7 +8,15 @@ import "@/lib/i18n";
 import { FileBrowser } from "./file-browser";
 
 const clients: QueryClient[] = [];
-beforeEach(async () => { vi.stubGlobal("crypto", webcrypto); await i18n.changeLanguage("en"); });
+beforeEach(async () => {
+  // FileReader uses jsdom's ArrayBuffer realm; Node's Web Crypto needs its own bytes.
+  const digest = webcrypto.subtle.digest.bind(webcrypto.subtle);
+  vi.spyOn(webcrypto.subtle, "digest").mockImplementation((algorithm, data) =>
+    digest(algorithm, Buffer.from(data as ArrayBuffer)),
+  );
+  vi.stubGlobal("crypto", webcrypto);
+  await i18n.changeLanguage("en");
+});
 afterEach(() => clients.splice(0).forEach((client) => client.clear()));
 
 function renderBrowser() {
