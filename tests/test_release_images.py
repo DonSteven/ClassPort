@@ -159,3 +159,9 @@ def test_release_images_serve_login_api_and_mcp():
                     assert rejected.returncode == 1, "unauthenticated MCP must fail the release gate"
                     assert "smoke: PASS" not in rejected.stdout
                     assert password not in rejected.stdout + rejected.stderr
+                # Scheduled backups require the API to drain and exit cleanly.
+                api_container = api.get_wrapped_container()
+                api_container.stop(timeout=30)
+                api_container.reload()
+                assert not api_container.attrs["State"]["Running"]
+                assert api_container.attrs["State"]["ExitCode"] in {0, 143}

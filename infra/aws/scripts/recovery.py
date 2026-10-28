@@ -290,8 +290,13 @@ def backup(root, settings):
             stopped = True
             compose(root, release, "stop", "--timeout", "300", *WRITERS)
             states = json.loads(run(["docker", "inspect", *services]))
-            if any(item["State"]["Running"] or item["State"]["ExitCode"] != 0 for item in states):
-                raise ValueError("Application did not drain cleanly; no consistent backup will be published")
+            for item in states:
+                state = item["State"]
+                service = item.get("Config", {}).get("Labels", {}).get("com.docker.compose.service")
+                # Uvicorn re-raises SIGTERM after completing graceful shutdown.
+                expected_exits = {0, 143} if service == "classport" else {0}
+                if state["Running"] or state["ExitCode"] not in expected_exits:
+                    raise ValueError("Application did not drain cleanly; no consistent backup will be published")
             manifest["consistent_at"] = now()
             progress("backup.validate")
             manifest["database_state"] = database_state(work, root, config, settings)

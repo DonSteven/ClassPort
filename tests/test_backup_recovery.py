@@ -123,6 +123,36 @@ def test_failed_upload_resumes_services_without_publishing_manifest(host, monkey
     assert not objects and not (root / "last-backup.json").exists()
 
 
+@pytest.mark.parametrize("service,exit_code,running,accepted", [
+    ("classport", 143, False, True),
+    ("classport", 137, False, False),
+    ("classport", 1, False, False),
+    ("worker", 143, False, False),
+    ("classport", 143, True, False),
+])
+def test_backup_recognizes_api_sigterm_without_accepting_aborted_writers(
+    host, monkeypatch, service, exit_code, running, accepted,
+):
+    root, settings, objects, calls = host
+    original = recovery.run
+
+    def run(args):
+        if args[:2] == ["docker", "inspect"]:
+            return json.dumps([{"State": {"Running": running, "ExitCode": exit_code},
+                                "Config": {"Labels": {"com.docker.compose.service": service}}}])
+        return original(args)
+
+    monkeypatch.setattr(recovery, "run", run)
+    if accepted:
+        result = recovery.backup(root, settings)
+        assert result["key"] in objects
+    else:
+        with pytest.raises(ValueError, match="drain cleanly"):
+            recovery.backup(root, settings)
+        assert not objects and not (root / "last-backup.json").exists()
+    assert calls[-1][:2] == ("up", "-d")
+
+
 @pytest.mark.parametrize("failure", ["source", "nonempty", "database"])
 def test_restore_refuses_source_or_nonempty_targets(host, tmp_path, monkeypatch, failure):
     root, settings, objects, calls = host
