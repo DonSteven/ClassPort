@@ -73,7 +73,7 @@ run "minimum_private_environment" {
       !aws_db_instance.postgres.publicly_accessible &&
       aws_db_instance.postgres.storage_encrypted &&
       aws_db_instance.postgres.manage_master_user_password &&
-      aws_db_instance.postgres.backup_retention_period == 7 &&
+      aws_db_instance.postgres.backup_retention_period == 1 &&
       !aws_db_instance.postgres.skip_final_snapshot
     )
     error_message = "RDS must be private, encrypted, backed up and use an AWS-managed administrator secret."

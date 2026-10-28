@@ -226,7 +226,7 @@ failure semantics and timeout handling.
 Emergency rollback uses the saved previous image pair; follow the authenticated
 SSM procedure in [Production delivery](../../docs/PRODUCTION.md#emergency-rollback).
 
-RDS keeps seven days of automated backups. The private, encrypted, versioned S3
+RDS keeps one day of automated backups. The private, encrypted, versioned S3
 bucket stores consistent database exports, course archives and their manifest.
 The host has upload-only backup access; the separate `recovery_policy_arn` can be
 attached to an approved isolated recovery identity. A8's versioned `recovery.py`

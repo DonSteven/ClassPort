@@ -7,7 +7,7 @@ name        = "classport-prod"
 # acme_email  = "<your-acme-account-email>"
 
 # Defaults: t3.small EC2, 30 GiB gp3 data disk, db.t4g.micro PostgreSQL 16,
-# single AZ, 7 days of RDS backups, 14 days of container logs, no NAT gateway.
+# single AZ, 1 day of RDS backups, 14 days of container logs, no NAT gateway.
 
 # Applying an email subscription sends a confirmation email; confirm it to receive alerts.
 operations_email = null
