@@ -11,9 +11,104 @@
 
 # ClassPort
 
+A self-hostable personal study dashboard. Track your **courses, schedule, lectures, study topics, deliverables, and tasks** in one place — and use **ChatGPT on the web** to read course material and update your study plan through MCP.
+
+![ClassPort study dashboard in the Zine theme](./docs/screenshots/theme-zine.png)
+
+*Zine is the initial theme. Previews use sample course data.*
+
+[Themes](#themes) · [Study workflow](#study-workflow) · [Cloud use](#use-in-the-cloud) · [Local setup](#quick-start) · [ChatGPT guide](./docs/chatgpt.md)
+
+## Themes
+
+Choose a theme in **Settings → Theme**. All seven themes work with the same courses, files, tasks, and study progress. Select a name below to open its preview.
+
+| Theme | Style |
+| --- | --- |
+| [Zine](./docs/screenshots/theme-zine.png) — initial theme | Cream paper, colorful stickers, and a hand-drawn feel |
+| [Mission Control](./docs/screenshots/theme-mission-control.png) | Deep navy, amber accents, and a mission dashboard |
+| [Material Expressive](./docs/screenshots/theme-material.png) | Lavender surfaces, rounded shapes, and colorful cards |
+| [Terminal](./docs/screenshots/theme-terminal.png) | Dark surfaces, monospaced text, and cyan accents |
+| [Library](./docs/screenshots/theme-library.png) | Paper tones, sepia text, and a card-catalog layout |
+| [Swiss](./docs/screenshots/theme-swiss.png) | A clear grid, large typography, and red accents |
+| [Generic](./docs/screenshots/theme-classic.png) | Warm dark surfaces, serif headings, and generous spacing |
+
+<details>
+<summary>Mission Control preview</summary>
+
+![Mission Control study dashboard](./docs/screenshots/theme-mission-control.png)
+
+</details>
+
+<details>
+<summary>Material Expressive preview</summary>
+
+![Material Expressive study dashboard](./docs/screenshots/theme-material.png)
+
+</details>
+
+<details>
+<summary>Terminal — short animated preview</summary>
+
+![Terminal theme animation](./docs/screenshots/theme-terminal.gif)
+
+</details>
+
+<details>
+<summary>Library preview</summary>
+
+![Library study dashboard](./docs/screenshots/theme-library.png)
+
+</details>
+
+<details>
+<summary>Swiss preview</summary>
+
+![Swiss study dashboard](./docs/screenshots/theme-swiss.png)
+
+</details>
+
+<details>
+<summary>Generic preview</summary>
+
+![Generic study dashboard](./docs/screenshots/theme-classic.png)
+
+</details>
+
+## Study workflow
+
+After creating the `STAT201` course, setting its folder to `STAT201`, and [connecting ChatGPT](./docs/chatgpt.md), try this sequence:
+
+| Step | What to do |
+| --- | --- |
+| Upload the material | In **Files**, upload the statistics homework PDF to `STAT201/homework-05.pdf`. |
+| Read and review | In a connected ChatGPT web conversation: “Use ClassPort to read problem 4 in `STAT201/homework-05.pdf`. Explain why a sum of independent exponential random variables with the same rate has a Gamma distribution, how the central limit theorem gives a normal approximation, and ask me a review question.” |
+| Save the next action | “Create a high-priority task for STAT201 called ‘Compare Gamma and normal PDF/CDF plots in R’.” Review the proposed change and confirm it if ChatGPT asks. |
+| Check the result | Refresh the dashboard or open **Tasks** to check the saved task. You can also edit or complete it directly there. |
+
+Uploads and replacements go through the dashboard's **Files** view. PDF reads return extracted text and page images; for scanned pages or diagrams that ChatGPT cannot see, attach the PDF or page image directly to the conversation. See the [file workflow guide](./docs/chatgpt.md#work-with-course-files).
+
 Course schedules, date-only study topics, dashboard calendars, and time inputs use US Eastern Time (`America/New_York`), with automatic daylight saving (EST/EDT). Timestamps are stored and exchanged in UTC.
 
-A self-hostable personal study dashboard. Track your **courses, schedule, lectures, study topics, deliverables, and tasks** in one place — and use **ChatGPT on the web** to read course material and update your study plan through MCP.
+## Use in the cloud
+
+Deploy ClassPort to your own server with HTTPS, then use the dashboard from a browser on your computer, tablet, or phone. Courses, tasks, progress, and uploaded material live in that installation. Sign in to the same account on another device and refresh the page to continue with the same saved records. Your everyday devices only need a browser; the application runs on the server.
+
+For example, upload slides from your laptop before class, check your schedule from your phone, then use ChatGPT on the web to review the material and save your next study task.
+
+1. **Open your dashboard.** Visit your deployment's address, such as `https://your-domain.tld`, and sign in with your ClassPort account.
+2. **Set up your semester.** Add your profile, semester, and courses, then upload PDFs and notes through **Files**.
+3. **Connect ChatGPT.** Use your installation's `https://your-domain.tld/mcp` endpoint, choose OAuth, and sign in to ClassPort to authorize the connection. Install and select the plugin in ChatGPT on the web; access depends on your account and workspace permissions. Follow the [ChatGPT setup guide](./docs/chatgpt.md).
+4. **Continue across devices.** Saved changes from the dashboard and the connected ChatGPT conversation use the same data. Refresh the dashboard to check the result.
+
+The domain above is an example; use the hostname configured for your own deployment. Cloud hosting is self-managed. Start with the [Docker and HTTPS installation guide](./INSTALL.md), or follow the [AWS setup](./infra/aws/README.md) and [production release workflow](./docs/PRODUCTION.md).
+
+<details>
+<summary>Phone browser preview — Mission Control</summary>
+
+<img src="./docs/screenshots/mobile-mission-control.png" alt="ClassPort Mission Control dashboard in a phone browser" width="360" />
+
+</details>
 
 ## How I use this
 
@@ -52,14 +147,14 @@ Connect ClassPort as an OAuth-protected MCP plugin in **ChatGPT on the web**, th
 
 ## You'll need
 
-Before you start, have:
+To run your own installation, have:
 
 - **Docker** + **Docker Compose v2.30+** (the stack — Postgres, FastAPI, frontend — all run as containers)
 - **Node 20+** and **pnpm** (via [corepack](https://pnpm.io/installation#using-corepack)) for building the frontend
 - A **public HTTPS hostname** for ChatGPT to reach the MCP endpoint, and a ChatGPT account/workspace permitted to add custom MCP plugins
-- **~15 minutes** for first-time setup
+- Time to configure database credentials, your account, and HTTPS
 
-The whole stack — Postgres, the FastAPI backend, and the static frontend — runs on a single box. Anything that runs Docker works: a €5/mo VPS is plenty.
+The local stack runs on one Docker-capable machine. A VPS can host it behind HTTPS; the AWS deployment uses separate application, database, and file-storage services. Once your installation is running, daily use only requires a browser.
 
 ## Quick start
 
@@ -106,7 +201,7 @@ pool settings and verified TLS connections to RDS.
 
 For RDS / external PostgreSQL, use `./deploy.sh --external-db` on every deploy to skip local Postgres.
 
-For EC2 with RDS and CI-built immutable images, use the separate
+For EC2 with RDS, S3, and immutable application images, use the separate
 [production release workflow](docs/PRODUCTION.md). It keeps local deployment
 independent and restores the frontend/backend image pair together on failure.
 
@@ -190,18 +285,14 @@ docs/
 
 ## Stack
 
-Three containers behind a single host-side reverse proxy:
+The local Docker setup serves the application through a reverse proxy. The [AWS deployment](./infra/aws/README.md) runs application services on EC2, PostgreSQL on RDS, and course material in a private S3 bucket.
 
 - **Frontend:** Vite + React 19 + TypeScript + Tailwind + shadcn/ui, built into a Caddy:alpine image that serves the SPA and proxies API traffic to the backend on the internal docker network
 - **Backend:** FastAPI (Python 3.12) running as one uvicorn worker, talking to Postgres directly via `psycopg` async pool
 - **Data:** Postgres 16 (internal-network only — never exposed to the host)
-- **Files:** plain filesystem under `STUDY_ROOT` (default `/opt/courses`), bind-mounted into the FastAPI container
+- **Files:** local storage under `STUDY_ROOT` (default `/opt/courses`) for the local setup; a private, versioned S3 bucket for the AWS setup
 - **MCP:** Python `mcp` SDK, mounted at `/mcp` over Streamable HTTP with OAuth 2.1
 - **Hosting:** anywhere Docker runs — bring your own outer reverse proxy (Caddy in [INSTALL.md](./INSTALL.md)) for TLS termination
-
-## Design
-
-The interface uses a warm palette, editorial typography, course accents, and several dashboard themes. Switch themes from the dashboard settings.
 
 ## License
 

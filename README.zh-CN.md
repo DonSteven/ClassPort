@@ -11,9 +11,104 @@
 
 # ClassPort
 
+一个可自行托管的个人学习看板。在同一处管理**课程、课表、讲次、学习主题、作业和任务**，通过 **ChatGPT 网页版**与 MCP 阅读课程资料、更新学习安排。
+
+![ClassPort 手账主题学习看板](./docs/screenshots/theme-zine-zh.png)
+
+*首次使用采用手账（Zine）主题。预览图片使用演示课程数据。*
+
+[主题选项](#主题选项) · [学习流程](#学习流程) · [云端使用](#在云端使用) · [本地安装](#快速开始) · [ChatGPT 指南](./docs/chatgpt.zh-CN.md)
+
+## 主题选项
+
+在**设置 → 主题**中选择界面风格。七种主题使用同一份课程、文件、任务和学习进度，点击下方主题名称可查看对应预览。
+
+| 主题 | 风格 |
+| --- | --- |
+| [手账（Zine）](./docs/screenshots/theme-zine-zh.png)——初始主题 | 奶油底色、彩色贴纸与手绘感 |
+| [航天控制台（Mission Control）](./docs/screenshots/theme-mission-control-zh.png) | 深海军蓝、琥珀色强调与控制台布局 |
+| [Material 灵动（Material Expressive）](./docs/screenshots/theme-material-zh.png) | 浅紫色界面、圆角造型与多彩卡片 |
+| [终端（Terminal）](./docs/screenshots/theme-terminal-zh.png) | 深色背景、等宽字体与青色强调 |
+| [图书馆（Library）](./docs/screenshots/theme-library-zh.png) | 纸张色、棕褐文字与卡片目录布局 |
+| [瑞士排版（Swiss）](./docs/screenshots/theme-swiss-zh.png) | 网格布局、大字标题与红色强调 |
+| [默认（Generic）](./docs/screenshots/theme-classic-zh.png) | 暖色深底、衬线标题与充足留白 |
+
+<details>
+<summary>航天控制台预览</summary>
+
+![航天控制台主题学习看板](./docs/screenshots/theme-mission-control-zh.png)
+
+</details>
+
+<details>
+<summary>Material 灵动预览</summary>
+
+![Material 灵动主题学习看板](./docs/screenshots/theme-material-zh.png)
+
+</details>
+
+<details>
+<summary>终端主题短动图</summary>
+
+![终端主题动态预览](./docs/screenshots/theme-terminal-zh.gif)
+
+</details>
+
+<details>
+<summary>图书馆预览</summary>
+
+![图书馆主题学习看板](./docs/screenshots/theme-library-zh.png)
+
+</details>
+
+<details>
+<summary>瑞士排版预览</summary>
+
+![瑞士排版主题学习看板](./docs/screenshots/theme-swiss-zh.png)
+
+</details>
+
+<details>
+<summary>默认（Generic）预览</summary>
+
+![默认编辑风主题学习看板](./docs/screenshots/theme-classic-zh.png)
+
+</details>
+
+## 学习流程
+
+创建 `STAT201` 课程、将课程目录设为 `STAT201`，并[连接 ChatGPT](./docs/chatgpt.zh-CN.md)后，可以尝试下面的流程：
+
+| 步骤 | 操作 |
+| --- | --- |
+| 上传课程资料 | 在**文件**页，将统计作业 PDF 上传为 `STAT201/homework-05.pdf`。 |
+| 阅读与复习 | 在已连接的 ChatGPT 网页对话中说：“使用 ClassPort 读取 `STAT201/homework-05.pdf` 第 4 题，解释为什么独立同分布的指数随机变量之和服从 Gamma 分布、如何用中心极限定理得到正态近似，并问我一道复习题。” |
+| 保存下一步安排 | “为 STAT201 创建高优先级任务：用 R 对比 Gamma 分布及其正态近似的 PDF、CDF 图。”核对拟执行的修改，并按 ChatGPT 提示确认。 |
+| 核对保存结果 | 刷新看板或打开**任务**页，检查保存的任务，也可以直接在界面中编辑或完成它。 |
+
+上传和替换资料通过看板的**文件**页完成。PDF 工具返回提取的文字和页面图像；对于 ChatGPT 无法看到的扫描页或图表，可将原 PDF 或页面图片直接附加到对话。完整说明见[文件与学习指南](./docs/chatgpt.zh-CN.md#文件与学习)。
+
 课程安排、学习主题日期、看板日历和时间输入统一使用**美国东部时间（`America/New_York`）**，自动处理冬令时和夏令时（EST/EDT）；时间戳以 UTC 存储和传输。
 
-一个可自行托管的个人学习看板。在同一处管理**课程、课表、讲次、学习主题、作业和任务**，通过 **ChatGPT 网页版**与 MCP 阅读课程资料、更新学习安排。
+## 在云端使用
+
+将 ClassPort 部署到自己的云服务器并配置 HTTPS 后，就可以通过电脑、平板或手机浏览器访问学习看板。课程、任务、学习进度和已上传的资料保存在这套云端服务中；换一台设备登录同一个账户并刷新页面后，可以继续使用已保存的数据。日常设备只需浏览器，应用运行在服务器上。
+
+例如，上课前在电脑上上传课件、查看课表；下课后用手机浏览器记录待办；晚上打开 ChatGPT 网页版，结合资料复习，再保存下一次学习任务。
+
+1. **打开云端看板。** 访问自己的部署地址，例如 `https://your-domain.tld`，使用 ClassPort 账户登录。
+2. **设置学期和课程。** 填写个人资料、学期和课程，通过**文件**页上传 PDF 和笔记。
+3. **连接 ChatGPT。** 使用这套部署的 `https://your-domain.tld/mcp` 地址，选择 OAuth，登录 ClassPort 并授权，再在 ChatGPT 网页版中安装和选择插件。能否使用取决于账户与工作区权限，完整步骤见 [ChatGPT 使用指南](./docs/chatgpt.zh-CN.md)。
+4. **在不同设备上继续使用。** 看板和已连接的 ChatGPT 对话访问同一份数据，保存修改后刷新看板，即可核对结果。
+
+上面的域名仅为示例，请替换为自己部署时配置的地址。云端服务由使用者自行维护：普通服务器可参考[安装与 HTTPS 配置](./INSTALL.md)，AWS 部署可参考 [AWS 配置指南](./infra/aws/README.md)和[生产发布流程](./docs/PRODUCTION.md)，这三份部署文档目前为英文。
+
+<details>
+<summary>手机浏览器预览——航天控制台</summary>
+
+<img src="./docs/screenshots/mobile-mission-control-zh.png" alt="手机浏览器中的 ClassPort 航天控制台学习看板" width="360" />
+
+</details>
 
 ## 使用方式
 
@@ -50,14 +145,14 @@ MCP 服务让 **ChatGPT 读取和更新学习记录**，包括课程、课表、
 
 ## 环境要求
 
-开始前需要准备：
+自行部署时需要准备：
 
 - **Docker** 和 **Docker Compose v2.30+**，用于运行 PostgreSQL、FastAPI 后端和前端容器
 - **Node 20+** 和 **pnpm**，可通过 [corepack](https://pnpm.io/installation#using-corepack) 安装，用于构建前端
 - **可公开访问的 HTTPS 域名**，供 ChatGPT 访问 MCP；账户和工作区需允许添加自定义 MCP 插件
-- 首次配置预计需要 **15 分钟左右**
+- 配置数据库凭证、登录账户和 HTTPS 所需的时间
 
-PostgreSQL、FastAPI 后端和静态前端都运行在同一台机器上。只要支持 Docker 即可，小型 VPS 也足够运行。
+本地完整环境可运行在一台支持 Docker 的机器上，也可通过 VPS 和 HTTPS 提供访问。AWS 方案分别使用应用服务器、数据库和文件存储服务。部署完成后，日常使用只需浏览器。
 
 ## 快速开始
 
@@ -96,6 +191,8 @@ chmod 600 .env .env.migration .env.docker .env.jobs
 `deploy.sh` 验证 Compose 配置、构建 `classport` 镜像、使用维护凭证完成迁移和账户初始化、启动前后端，并检查 `GET /api/health` 的就绪状态，最多等待 60 秒。就绪检查未通过时会自动回退到上一个镜像。
 
 使用 RDS 或外部 PostgreSQL 时，每次部署执行 `./deploy.sh --external-db`。
+
+使用 EC2、RDS、S3 和不可变应用镜像时，请参考独立的[生产发布流程](./docs/PRODUCTION.md)。
 
 后端现在运行于 `http://127.0.0.1:8000`，可这样验证：
 
@@ -168,18 +265,14 @@ docs/
 
 ## 技术栈
 
-同一台服务器上的三个容器，通过反向代理提供访问：
+本地 Docker 环境通过反向代理提供访问。[AWS 部署方案](./infra/aws/README.md)在 EC2 上运行应用服务，使用 RDS 保存 PostgreSQL 数据，使用私有 S3 存储桶保存课程资料。
 
 - **前端：** Vite、React 19、TypeScript、Tailwind 与 shadcn/ui，构建为 Caddy:alpine 镜像，提供静态页面，并通过内部 Docker 网络转发 API 请求
 - **后端：** FastAPI（Python 3.12），运行单个 uvicorn worker，使用 `psycopg` 异步连接池直接访问 PostgreSQL
 - **数据：** PostgreSQL 16，仅连接内部网络，不向主机公开端口
-- **文件：** 存放在 `STUDY_ROOT`（默认 `/opt/courses`）指定的文件系统中，并挂载到 FastAPI 容器
+- **文件：** 本地环境使用 `STUDY_ROOT`（默认 `/opt/courses`）；AWS 环境使用启用版本管理的私有 S3 存储桶
 - **MCP：** Python `mcp` SDK，通过 `/mcp` 提供带 OAuth 2.1 的 Streamable HTTP 服务
 - **部署：** 支持 Docker 的环境均可；由主机上的反向代理处理 TLS，示例见 [INSTALL.md](./INSTALL.md)
-
-## 设计
-
-界面采用暖色调、衬线标题和课程强调色，提供多种学习看板主题，可在看板设置中切换。
 
 ## 许可证
 
