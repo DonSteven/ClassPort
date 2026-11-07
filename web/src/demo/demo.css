@@ -1,0 +1,28 @@
+.demo-app { --demo-bar-height: 54px; padding-top: var(--demo-bar-height); }
+.demo-bar { position: fixed; inset: 0 0 auto; z-index: 35; min-height: var(--demo-bar-height); display: flex; align-items: center; gap: 18px; padding: 8px 20px; background: var(--surface); color: var(--fg); border-bottom: 1px solid var(--border); font: 12px/1.4 var(--font-sans); }
+.demo-bar-brand { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.demo-bar-brand svg { color: var(--info); }
+.demo-short-label { display: none; font-weight: 700; }
+.demo-bar-description { color: var(--muted); flex: 1; }
+.demo-bar-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.demo-bar-actions :is(a, button) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: inherit; white-space: nowrap; cursor: pointer; }
+.demo-bar-actions :is(a, button):hover { background: var(--surface-2); }
+.demo-bar :is(a, button):focus-visible, .demo-run:focus-visible { outline: 2px solid var(--info); outline-offset: 3px; }
+.demo-app aside[class] { top: var(--demo-bar-height); height: calc(100dvh - var(--demo-bar-height)); }
+.demo-app :is(.mc-topbar, .me-topbar) { top: var(--demo-bar-height); }
+.demo-conversation { display: grid; gap: 12px; font-size: 14px; line-height: 1.65; }
+.demo-conversation li { padding: 15px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.demo-speaker { display: block; margin-bottom: 6px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.demo-conversation a { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; text-decoration: underline; }
+.demo-run { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 44px; border: 1px solid var(--border); border-radius: 8px; background: var(--fg); color: var(--bg); font-size: 14px; font-weight: 600; cursor: pointer; }
+.demo-run:disabled { opacity: .6; cursor: wait; }
+@media (max-width: 920px) { .demo-bar-description { display: none; } }
+@media (max-width: 560px) {
+  .demo-app { --demo-bar-height: 58px; }
+  .demo-bar { gap: 8px; padding: 8px 10px; font-size: 11px; }
+  .demo-bar-actions { gap: 4px; }
+  .demo-bar-actions :is(a, button) { gap: 4px; min-height: 40px; padding: 5px 7px; }
+  .demo-bar-actions > a span { display: none; }
+  .demo-bar-brand strong, .demo-bar-actions > button:last-child span { display: none; }
+  .demo-short-label { display: inline; }
+}

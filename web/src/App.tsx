@@ -8,6 +8,18 @@ import Signup from "@/routes/signup";
 import ForgotPassword from "@/routes/forgot-password";
 import ResetPassword from "@/routes/reset-password";
 import VerifyEmail from "@/routes/verify-email";
+import { DEMO_MODE } from "@/lib/demo-mode";
+
+const DemoBar = lazy(() => import("@/demo/demo-bar"));
+
+function AppLayout() {
+  return (
+    <div className={DEMO_MODE ? "demo-app" : undefined}>
+      {DEMO_MODE && <DemoBar />}
+      <AppShell />
+    </div>
+  );
+}
 
 // Eager: Landing (the public marketing page Google sees) + Login (small +
 // always on the critical path). Everything under /app is lazy-loaded so
@@ -36,14 +48,14 @@ const router = createBrowserRouter([
     path: "/",
     element: SHOW_LANDING ? <Landing /> : <Navigate to="/app" replace />,
   },
-  { path: "/login", element: <Login /> },
-  { path: "/signup", element: <Signup /> },
-  { path: "/forgot-password", element: <ForgotPassword /> },
-  { path: "/reset-password", element: <ResetPassword /> },
-  { path: "/verify-email", element: <VerifyEmail /> },
+  { path: "/login", element: DEMO_MODE ? <Navigate to="/app" replace /> : <Login /> },
+  { path: "/signup", element: DEMO_MODE ? <Navigate to="/app" replace /> : <Signup /> },
+  { path: "/forgot-password", element: DEMO_MODE ? <Navigate to="/app" replace /> : <ForgotPassword /> },
+  { path: "/reset-password", element: DEMO_MODE ? <Navigate to="/app" replace /> : <ResetPassword /> },
+  { path: "/verify-email", element: DEMO_MODE ? <Navigate to="/app" replace /> : <VerifyEmail /> },
   {
     path: "/app",
-    element: <AppShell />,
+    element: <AppLayout />,
     children: [
       { index: true, element: <Dashboard /> },
       { path: "courses", element: <Courses /> },

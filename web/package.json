@@ -14,7 +14,9 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "dev": "vite",
+    "dev:demo": "vite --mode demo",
     "build": "tsc -b && vite build",
+    "build:demo": "tsc -b && vite build --mode demo && node ../scripts/build-seo.mjs --mode demo",
     "postbuild": "node ../scripts/build-seo.mjs",
     "lint": "eslint .",
     "test": "vitest run",

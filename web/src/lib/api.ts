@@ -3,7 +3,9 @@
  * On 401 we dispatch a custom event so the router can redirect to /login.
  */
 
-const RAW_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+import { DEMO_MODE } from "./demo-mode";
+
+const RAW_BASE = DEMO_MODE ? "" : import.meta.env.VITE_API_BASE_URL ?? "";
 // Strip trailing slash; if empty, we'll use relative paths (good for prod with same-origin /api)
 export const API_BASE = RAW_BASE.replace(/\/+$/, "");
 
@@ -51,7 +53,9 @@ export async function apiFetch<T = unknown>(
   };
   if (body !== undefined) init.body = JSON.stringify(body);
 
-  const res = await fetch(buildUrl(path, query), init);
+  const res = DEMO_MODE
+    ? await (await import("@/demo/api")).demoFetch(buildUrl(path, query), init)
+    : await fetch(buildUrl(path, query), init);
 
   if (res.status === 401) {
     // Bubble up a global event; AppShell listens and redirects.

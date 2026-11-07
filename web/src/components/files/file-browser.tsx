@@ -42,6 +42,7 @@ import {
   DropdownTrigger,
 } from "@/components/ui/dropdown";
 import { FileViewer } from "./file-viewer";
+import { DEMO_MODE } from "@/lib/demo-mode";
 
 type UploadEntry = {
   id: number;
@@ -230,6 +231,7 @@ export function FileBrowser({
 
   return (
     <div className="flex flex-col gap-3">
+      {DEMO_MODE && <p className="text-xs text-muted">{t("demo.filesNote")}</p>}
       {/* Search bar */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted pointer-events-none" />
@@ -302,7 +304,7 @@ export function FileBrowser({
           ))}
         </div>
         <div className="flex items-center gap-2">
-          <button
+          {!DEMO_MODE && <button
             type="button"
             onClick={onSyncMaterials}
             disabled={syncMaterials.isPending}
@@ -314,7 +316,7 @@ export function FileBrowser({
               <RefreshCw className="h-4 w-4 shrink-0" />
             )}
             <span className="truncate">{syncStage ?? (currentCourse ? t("files.syncMaterialsCourse", { code: currentCourse }) : t("files.syncMaterials"))}</span>
-          </button>
+          </button>}
           <button
             type="button"
             onClick={onNewFolder}
@@ -331,7 +333,8 @@ export function FileBrowser({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={uploadingBatch}
+            disabled={DEMO_MODE || uploadingBatch}
+            title={DEMO_MODE ? t("demo.filesNote") : undefined}
             className="touch-target inline-flex items-center gap-2 rounded-md border border-border/60 bg-surface-2 hover:bg-surface-2/80 px-3 text-sm font-medium disabled:opacity-50 transition-colors"
           >
             {uploadingBatch ? (

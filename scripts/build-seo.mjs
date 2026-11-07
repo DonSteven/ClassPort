@@ -30,9 +30,12 @@ function loadEnvFile(path) {
   return out;
 }
 
+const mode = process.argv.includes("--mode") ? process.argv[process.argv.indexOf("--mode") + 1] : null;
 const env = {
   ...loadEnvFile(join(WEB, ".env")),
   ...loadEnvFile(join(WEB, ".env.local")),
+  ...(mode ? loadEnvFile(join(WEB, `.env.${mode}`)) : {}),
+  ...(mode ? loadEnvFile(join(WEB, `.env.${mode}.local`)) : {}),
   ...process.env,
 };
 

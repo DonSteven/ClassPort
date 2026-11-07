@@ -47,6 +47,7 @@ import {
   useUpdateSecrets,
 } from "@/lib/queries";
 import { fmtEastern, TZ } from "@/lib/time";
+import { DEMO_MODE } from "@/lib/demo-mode";
 
 export default function Settings() {
   const { t } = useTranslation();
@@ -76,7 +77,7 @@ export default function Settings() {
         <Section icon={<CalendarDays className="h-4 w-4" />} title={t("settings.sections.semester")}>
           <SemesterForm />
           <div className="mt-4 pt-3 border-t border-border/50 text-sm text-muted font-mono tabular-nums">
-            {t("settings.serverTime")} ·{" "}
+            {t(DEMO_MODE ? "demo.localTime" : "settings.serverTime")} ·{" "}
             {dashboard.data ? fmtEastern(dashboard.data.now, "EEE d MMM yyyy · HH:mm") : "—"}
           </div>
         </Section>
@@ -86,14 +87,14 @@ export default function Settings() {
         </Section>
 
         <Section icon={<Database className="h-4 w-4" />} title={t("settings.sections.data")}>
-          <p className="text-sm text-muted mb-3">{t("settings.data.body")}</p>
+          <p className="text-sm text-muted mb-3">{t(DEMO_MODE ? "demo.description" : "settings.data.body")}</p>
           <Button onClick={onRefresh} variant="secondary">
             <RefreshCw className="h-4 w-4" /> {t("settings.data.refresh")}
           </Button>
         </Section>
 
         <Section icon={<Activity className="h-4 w-4" />} title={t("settings.sections.activity")}>
-          <p className="text-sm text-muted mb-3">{t("settings.activity.body")}</p>
+          <p className="text-sm text-muted mb-3">{t(DEMO_MODE ? "demo.activityNote" : "settings.activity.body")}</p>
           <Link
             to="/app/activity"
             className="inline-flex items-center gap-2 rounded-md border border-border/60 bg-surface-2 hover:bg-surface-2/80 px-3 py-2 text-sm font-medium transition-colors"
@@ -102,19 +103,19 @@ export default function Settings() {
           </Link>
         </Section>
 
-        <Section icon={<ShieldCheck className="h-4 w-4" />} title={t("settings.sections.security", "Security")}>
+        {!DEMO_MODE && <Section icon={<ShieldCheck className="h-4 w-4" />} title={t("settings.sections.security", "Security")}>
           <TotpCard />
-        </Section>
+        </Section>}
 
-        <Section icon={<Send className="h-4 w-4" />} title={t("settings.sections.telegram", "Telegram")}>
+        {!DEMO_MODE && <Section icon={<Send className="h-4 w-4" />} title={t("settings.sections.telegram", "Telegram")}>
           <TelegramCard />
-        </Section>
+        </Section>}
 
-        <Section icon={<LogOut className="h-4 w-4" />} title={t("settings.sections.session")}>
+        {!DEMO_MODE && <Section icon={<LogOut className="h-4 w-4" />} title={t("settings.sections.session")}>
           <Button onClick={onLogout} disabled={logout.isPending} variant="secondary">
             <LogOut className="h-4 w-4" /> {t("settings.session.signOut")}
           </Button>
-        </Section>
+        </Section>}
       </div>
     </>
   );

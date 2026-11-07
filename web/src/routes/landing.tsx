@@ -4,6 +4,7 @@ import { Wordmark } from "@/components/brand/wordmark";
 import { useSession } from "@/lib/queries";
 import { useDocumentTitle, useHtmlLang } from "@/lib/document-head";
 import "@/styles/landing.css";
+import { DEMO_MODE } from "@/lib/demo-mode";
 
 const GH_REPO = "DonSteven/ClassPort";
 const GH_URL = `https://github.com/${GH_REPO}`;
@@ -150,6 +151,7 @@ export default function Landing() {
   const [navHidden, setNavHidden] = useState(false);
 
   useEffect(() => {
+    if (DEMO_MODE) return;
     let cancelled = false;
     fetch(`https://api.github.com/repos/${GH_REPO}`)
       .then((r) => (r.ok ? r.json() : null))
@@ -209,7 +211,7 @@ export default function Landing() {
     return () => obs.disconnect();
   }, []);
 
-  if (session.data?.authed) {
+  if (!DEMO_MODE && session.data?.authed) {
     return <Navigate to="/app" replace />;
   }
 
@@ -244,11 +246,14 @@ export default function Landing() {
           </p>
 
           <div className="hero-ctas">
+            {DEMO_MODE && <a className="cta-primary" href="/app">Try the interactive demo <span aria-hidden="true">→</span></a>}
             <GhCta label="GitHub" stars={stars} />
             <a className="cta-secondary" href={INSTALL_URL} target="_blank" rel="noopener noreferrer">
               Install guide
             </a>
           </div>
+
+          {DEMO_MODE && <p className="lead" style={{ fontSize: 14 }}>No sign-up. Explore a sample semester, edit tasks, and try all seven themes. Changes stay in your browser.</p>}
 
           <div className="hero-screen">
             <div className="mock">

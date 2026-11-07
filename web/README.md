@@ -1,5 +1,7 @@
 # ClassPort frontend
 
+For the backend-free interactive showcase, see [Demo mode](../docs/DEMO.md).
+
 The ClassPort web interface uses React, TypeScript, and Vite. It includes the
 study dashboard, course and file management, settings, and the public landing page.
 
