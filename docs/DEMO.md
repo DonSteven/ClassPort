@@ -45,37 +45,3 @@ has upcoming work when a new visitor opens it. Fixture records are defined in
 `web/src/demo/materials/`. The same document source supplies the searchable text
 and its bundled static file. Never copy account records, credentials, personal contacts,
 or private course files into these public assets.
-
-## Cloudflare Pages
-
-Deploy only `web/dist/`, either by direct upload or by building the repository:
-
-| Setting | Value |
-| --- | --- |
-| Root directory | `web` |
-| Build command | `pnpm build:demo` |
-| Build output directory | `dist` |
-| Node version | A version supported by the installed Vite release |
-| Public origin | Set `VITE_SITE_URL` to the site's intended domain |
-
-Use Pages' single-page-application routing so direct visits and reloads at
-`/app/courses/...` return `index.html`. Do not add a top-level `404.html` that
-disables Pages' default SPA routing. No Pages Functions, database, or storage
-bindings are needed. Verify the temporary Pages URL before binding the existing
-domain.
-
-## Retire the AWS deployment
-
-Before deleting anything, export and verify the current database and file backup
-outside AWS, retain the configuration needed for restoration securely, and check
-the demo at its new host. Switching the domain to the demo ends the live MCP and
-OAuth service at that origin.
-
-Stopping EC2 and RDS is temporary cost reduction. EBS, Elastic IPs, database and
-backup storage can still incur charges; RDS restarts after seven stopped days.
-A permanent retirement must separately account for the project's RDS instance,
-EC2 host, data/root volumes, Elastic IP, both S3 buckets and their versions,
-snapshots, ECR images, Secrets Manager entries, and CloudWatch logs and alarms.
-Confirm the actual live resources and the backup-retention choice before any
-irreversible deletion. The repository's Terraform has explicit data-volume and
-database deletion protections; do not bypass them with an unreviewed destroy.

@@ -17,7 +17,15 @@ A self-hostable personal study dashboard. Track your **courses, schedule, lectur
 
 *Zine is the initial theme. Previews use sample course data.*
 
-[Themes](#themes) · [Study workflow](#study-workflow) · [Cloud use](#use-in-the-cloud) · [Local setup](#quick-start) · [ChatGPT guide](./docs/chatgpt.md)
+[Live demo](https://lab4long.dev/app) · [Themes](#themes) · [Study workflow](#study-workflow) · [Cloud use](#use-in-the-cloud) · [Local setup](#quick-start) · [ChatGPT guide](./docs/chatgpt.md)
+
+## Interactive demo
+
+**[Try ClassPort in your browser](https://lab4long.dev/app)** — no registration, login, or deployment required.
+
+For recruiters and other visitors, this interactive showcase opens a sample semester with editable courses, schedules, tasks, deadlines, exams, study topics, and sample files. All seven themes and English/Chinese interfaces are available. Changes are saved only in the current browser; use **Reset demo** to restore the initial data.
+
+Uploads and cloud sync are unavailable. The **MCP example** uses prepared responses and does not call a model or MCP server. For local development and deployment details, see [Demo mode](./docs/DEMO.md).
 
 ## Themes
 
